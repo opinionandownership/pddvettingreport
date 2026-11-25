@@ -271,7 +271,7 @@ function msg(t){$('msg').textContent=t}
 
 // ---- Shared reference counter (Google Sheet + Apps Script web app) ----
 // Paste the web app URL from Apps Script > Deploy between the quotes:
-const COUNTER_URL='https://script.google.com/a/macros/opinionandownership.com/s/AKfycbwX0WWdbQvBQBsycrDVFz-zNGK0vy-Jt_ddB3NQ9SGOK2PfbJlLHXARtZfW1_l9I5Bj/exec';
+const COUNTER_URL='https://script.google.com/macros/s/AKfycbwX0WWdbQvBQBsycrDVFz-zNGK0vy-Jt_ddB3NQ9SGOK2PfbJlLHXARtZfW1_l9I5Bj/exec';
 function bkey(b){return String(b||'').toLowerCase().replace(/^\s*m\/s\.?\s*/,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,120)||'no-bank'}
 const PEEK={};
 const nextFor=b=>PEEK[bkey(b)]||null;
