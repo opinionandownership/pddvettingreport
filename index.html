@@ -145,7 +145,7 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
   </section>
 
   <section class="panel">
-   <h2>Issued ref. numbers (this browser)</h2>
+   <h2>Issued ref. numbers</h2>
    <ul class="log" id="log"><li><span>No letters issued yet.</span></li></ul>
   </section>
  </div>
@@ -179,7 +179,7 @@ const userNo=()=>{const l=(USER.match(/[a-z]/gi)||[]).slice(0,3);const nums=(USE
 const save=()=>{try{localStorage.setItem('pdd-letter',JSON.stringify(S))}catch(e){}};
 
 const initials=b=>b.replace(/^\s*m\/s\.?\s*/i,'').split(/[\s.,&\-\/()]+/).filter(w=>/^[A-Za-z0-9]/.test(w)).map(w=>w[0].toUpperCase()).join('');
-const refNo=()=>{const d=S.date?new Date(S.date+'T00:00'):new Date();const p=[initials(S.bank)||'XX'];if(userNo())p.push(userNo());if(S.serial.trim())p.push(S.serial.trim());p.push(MON[d.getMonth()],d.getFullYear());return p.join('/')};
+const refNo=()=>{const d=S.date?new Date(S.date+'T00:00'):new Date();const p=[initials(S.bank)||'XX'];if(userNo())p.push(userNo());p.push(S.serial.trim()||'__');p.push(MON[d.getMonth()],d.getFullYear());return p.join('/')};
 const cap=n=>String(n||'').trim().replace(/(^|[\s.\-'(])([a-z])/g,(m,a,b)=>a+b.toUpperCase());
 const isMODT=t=>/\bMODT\b/i.test(t)||/memorandum of deposit of title/i.test(t);
 const bankFull=()=>'M/s '+(S.bank.trim()||'_____');
@@ -198,7 +198,7 @@ const subject=()=>'Sub : Handing Over The PDD - Original Documents: '+S.ttl+' '+
 
 $('ttl').innerHTML=PFX.filter(Boolean).map(p=>`<option>${p}</option>`).join('');
 const fields=['bank','addr','date','loan','ttl','name'];
-fields.forEach(f=>{$(f).value=S[f];$(f).addEventListener('input',()=>{S[f]=$(f).value;save();render();if(f==='name'||f==='ttl')refreshPrev();if(f==='bank'){refreshPrev();const k=bkey(S.bank);if(!S.addr.trim()&&KNOWN[k]){S.addr=KNOWN[k];$('addr').value=S.addr}applyAuto(false)}})});
+fields.forEach(f=>{$(f).value=S[f];$(f).addEventListener('input',()=>{S[f]=$(f).value;save();render();if(f==='name'||f==='ttl')refreshPrev();if(f==='bank'){refreshPrev();const k=bkey(S.bank);if(!S.addr.trim()&&KNOWN[k]){S.addr=KNOWN[k];$('addr').value=S.addr}applyAuto(true);peek()}})});
 $('user').value=USER;
 $('user').addEventListener('input',()=>{USER=$('user').value;try{localStorage.setItem('pdd-user',USER)}catch(e){}render()});
 const refreshPrev=()=>document.querySelectorAll('.doc').forEach(b=>{b.querySelector('.prev').textContent=docText(S.docs[+b.dataset.i])});
@@ -263,55 +263,49 @@ const page=$('page'),vp=$('vp');
 function fit(){const w=vp.parentElement.clientWidth;const k=Math.min(1,w/794);page.style.transform=`scale(${k})`;vp.style.height=page.offsetHeight*k+'px';$('pgnote').textContent=page.scrollHeight>1130?'Long list: PDF continues onto page 2 on letterhead':''}
 function render(){page.innerHTML=letterHTML(false);fit();
  const rn=S.bank.trim()?refNo():'enter bank name';$('refOut').textContent=rn;$('refBar').textContent=rn;$('userNo').textContent=userNo()||'—';
- $('refNote').textContent=S.issued?'Issued. Click New matter for the next number.':'Generated automatically; fixed when you download.';
+ $('refNote').textContent=S.issued?'Issued with this download. Downloading again issues a new number.':(S.serial?'Next free number; it is reserved for you when you download.':'Number is issued from the shared counter when you download.');
 }
 new ResizeObserver(fit).observe(vp.parentElement);
 
 function msg(t){$('msg').textContent=t}
 
-let DB=null,COUNTS={};
+// ---- Shared reference counter (Google Sheet + Apps Script web app) ----
+// Paste the web app URL from Apps Script > Deploy between the quotes:
+const COUNTER_URL='';
 function bkey(b){return String(b||'').toLowerCase().replace(/^\s*m\/s\.?\s*/,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,120)||'no-bank'}
-try{COUNTS=JSON.parse(localStorage.getItem('pdd-next-map')||'{}')||{}}catch(e){COUNTS={}}
-const nextFor=b=>COUNTS[bkey(b)]>0?COUNTS[bkey(b)]:1;
-const keepCounts=()=>{try{localStorage.setItem('pdd-next-map',JSON.stringify(COUNTS))}catch(e){}};
-
+const PEEK={};
+const nextFor=b=>PEEK[bkey(b)]||null;
+async function api(params){
+ if(!COUNTER_URL)throw new Error('The reference counter is not connected yet.');
+ const r=await fetch(COUNTER_URL+'?'+new URLSearchParams(params),{redirect:'follow'});
+ const j=await r.json();if(!j.ok)throw new Error(j.error||'Counter error');return j;
+}
+let peekT=null;
+function peek(){
+ clearTimeout(peekT);if(!S.bank.trim()||!COUNTER_URL)return;
+ const k=bkey(S.bank);
+ peekT=setTimeout(async()=>{try{const j=await api({action:'peek',key:k});PEEK[k]=+j.next;applyAuto(false)}catch(e){}},400);
+}
 function applyAuto(force){
- if(force){S.serialAuto=true;S.issued=null}
- if(!S.issued){S.serial=String(nextFor(S.bank))}
- S.serialAuto=true;save();render();
+ if(force){S.issued=null}
+ if(!S.issued){const n=nextFor(S.bank);S.serial=n?String(n):''}
+ save();render();
 }
 function renderLog(list){
  $('log').innerHTML=list.length?list.map(x=>`<li><b>${esc(x.ref)}</b><span>${esc(x.date||'')}</span><span>${esc(x.borrower||'')}</span><span>${esc(x.loan||'')}</span>${x.by?`<span>By ${esc(x.by)}${x.userNo?' (User No '+esc(x.userNo)+')':''}</span>`:''}</li>`).join(''):'<li><span>No letters issued yet.</span></li>';
 }
-const localLog=()=>{try{return JSON.parse(localStorage.getItem('pdd-log')||'[]')}catch(e){return[]}};
-renderLog(localLog());
-(async()=>{
- try{DB=await window.claude?.use?.('db')}catch(e){DB=null}
- if(!DB)return;
- try{
-  DB.collection('counters').onSnapshot(q=>{q.docs.forEach(d=>{const v=+(d.data()||{}).next;if(v>0)COUNTS[d.id]=Math.max(v,COUNTS[d.id]||0)});keepCounts();applyAuto(false)},()=>{});
-  DB.collection('letters').orderBy('at','desc').limit(20).onSnapshot(q=>renderLog(q.docs.map(d=>d.data())),()=>{});
- }catch(e){}
-})();
+async function loadLog(){try{const j=await api({action:'recent'});renderLog(j.rows||[])}catch(e){$('log').innerHTML='<li><span>'+esc(COUNTER_URL?'Register could not be loaded.':'Reference counter not connected yet.')+'</span></li>'}}
+loadLog();
+// Every generation takes a fresh number from the shared counter. Returns true when a number was issued.
 async function issue(){
- if(S.issued)return;
- let n=parseInt(S.serial);
- if(DB){
-  try{
-   const ref=DB.doc('counters/'+bkey(S.bank));
-   let got=await ref.acquire({holder:'h'+Math.random().toString(36).slice(2),ttlMs:5000});
-   if(!got.acquired){await new Promise(r=>setTimeout(r,1500));got=await ref.acquire({holder:'h'+Math.random().toString(36).slice(2),ttlMs:5000})}
-   const sn=await ref.get();const cur=sn.exists?(+sn.data().next||0):0;
-   if(cur>0)n=cur;
-   if(n>0){S.serial=String(n);if(n+1>cur)await ref.set({next:n+1});
-    await DB.collection('letters').add({ref:refNo(),serial:n,bank:S.bank,loan:S.loan,borrower:(S.ttl+' '+cap(S.name)).trim(),date:fmt(S.date),by:cap(USER),userNo:userNo(),at:Date.now()})}
-  }catch(e){msg('This number could not be added to the office register; it is kept in this browser only.')}
- }
- if(n>0){
-  {const k=bkey(S.bank);if(!(COUNTS[k]>n))COUNTS[k]=n+1;keepCounts()}
-  try{const lg=localLog();lg.unshift({ref:refNo(),loan:S.loan,borrower:(S.ttl+' '+cap(S.name)).trim(),date:fmt(S.date),by:cap(USER),userNo:userNo()});localStorage.setItem('pdd-log',JSON.stringify(lg.slice(0,20)));if(!DB)renderLog(lg)}catch(e){}
-  S.issued=n;save();render();
- }
+ const d=S.date?new Date(S.date+'T00:00'):new Date();
+ try{
+  msg('Getting the next reference number…');
+  const j=await api({action:'issue',key:bkey(S.bank),ini:initials(S.bank)||'XX',user:userNo(),mon:MON[d.getMonth()],yr:String(d.getFullYear()),
+   bank:S.bank,borrower:(S.ttl+' '+cap(S.name)).trim(),loan:S.loan,date:fmt(S.date),by:cap(USER)});
+  S.serial=String(j.serial);S.issued=j.serial;PEEK[bkey(S.bank)]=j.serial+1;save();render();loadLog();
+  return true;
+ }catch(e){msg('No reference number could be issued, so nothing was downloaded: '+e.message);return false}
 }
 
 let lhData=null;
@@ -330,7 +324,7 @@ const fname=ext=>'PDD_'+(S.name.trim()||'Letter').replace(/[^\w]+/g,'_')+'_'+(S.
 $('pdf').addEventListener('click',async()=>{
  try{
   if(!USER.trim()){msg('Enter your name under Prepared by first.');$('user').focus();return}if(!S.bank.trim()){msg('Enter the bank name first.');$('bank').focus();return}
-  msg('Preparing PDF…');await issue();
+  if(!(await issue()))return;msg('Preparing PDF…');
   const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:'mm',format:'a4'});
   const img=await letterhead();const bg=()=>doc.addImage(img,'JPEG',0,0,210,297);
   bg();const L=19,R=191;let y=50;
@@ -366,7 +360,7 @@ $('pdf').addEventListener('click',async()=>{
  }catch(e){msg('Could not build the PDF: '+e.message)}
 });
 
-$('word').addEventListener('click',async()=>{if(!USER.trim()){msg('Enter your name under Prepared by first.');$('user').focus();return}if(!S.bank.trim()){msg('Enter the bank name first.');$('bank').focus();return}await issue();
+$('word').addEventListener('click',async()=>{if(!USER.trim()){msg('Enter your name under Prepared by first.');$('user').focus();return}if(!S.bank.trim()){msg('Enter the bank name first.');$('bank').focus();return}if(!(await issue()))return;
  const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>PDD Letter</title>
 <style>@page{size:21cm 29.7cm;margin:4.5cm 2cm 3.5cm 2cm}body{font-family:'Bookman Old Style',serif;font-size:12pt;line-height:1.5}p{margin:0}table{border-collapse:collapse;width:100%}th,td{border:1px solid #000;padding:4pt 6pt;vertical-align:top;font-size:11.5pt}th{background:#f4e9e9;text-align:left}.dl{width:100%}.sub{font-weight:bold;margin:10pt 0}</style></head><body>
 <table class="dl" style="border:none;width:100%"><tr><td style="border:none;padding:0">Date: ${esc(fmt(S.date))}</td><td style="border:none;padding:0;text-align:right">Ref.No: ${esc(refNo())}</td></tr></table><br>
@@ -387,7 +381,7 @@ $('copy').addEventListener('click',async()=>{
  }catch(e){try{await navigator.clipboard.writeText(t);msg('Copied as plain text.')}catch(e2){msg('Copy was blocked by the browser.')}}
 });
 
-drawDocs();applyAuto(false);
+drawDocs();applyAuto(true);peek();
 }
 </script>
 </body>
