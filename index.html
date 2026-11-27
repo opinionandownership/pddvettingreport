@@ -37,6 +37,17 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 .pfx{display:grid;grid-template-columns:96px minmax(0,1fr);gap:6px}
 .ref small{display:block;color:var(--mute);margin-top:2px}
 .linkbtn{border:0;background:none;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;padding:0;min-height:0}
+.bklist{max-height:320px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;margin-top:8px;padding:4px}
+.bk{display:flex;align-items:flex-start;gap:10px;padding:9px 10px;min-height:44px;margin:0;border-radius:8px;cursor:pointer;color:var(--ink);font-size:14px;line-height:1.35}
+.bk:hover{background:var(--acc2)}
+.bk input{position:absolute;opacity:0;width:1px;height:1px;min-height:0}
+.bk .box{flex:none;width:20px;height:20px;border:2px solid var(--mute);border-radius:4px;margin-top:1px;display:grid;place-items:center;font-size:14px;line-height:1;color:#fff}
+.bk input:checked+.box{background:var(--acc);border-color:var(--acc)}
+.bk input:checked+.box::after{content:"✓"}
+.bk input:focus-visible+.box{outline:2px solid var(--acc);outline-offset:2px}
+.bk:has(input:checked){background:var(--acc2);font-weight:500}
+.bk small{display:block;color:var(--mute);font-size:12.5px;font-weight:400}
+.bk[hidden]{display:none}
 .ctr{margin-top:8px;font-size:13px;color:var(--mute)}.ctr[data-s=ok]{color:#1d7a3a}.ctr[data-s=bad]{color:#b3261e}
 .log{list-style:none;margin:0;padding:0;font-size:13px}
 .log li{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:2px 10px;padding:8px 0;border-top:1px solid var(--line)}
@@ -106,9 +117,10 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 
   <section class="panel">
    <h2>Bank</h2>
-   <label for="bank">Bank / NBFC name (without M/s)</label>
-   <input id="bank" list="banks" autocomplete="off" placeholder="e.g. Truhome Finance Limited">
-   <datalist id="banks"><option value="Truhome Finance Limited"></datalist>
+   <label for="bankSearch">Tick the bank</label>
+   <input id="bankSearch" type="search" placeholder="Search banks or branch" autocomplete="off" aria-label="Search banks">
+   <div class="bklist" id="bankList" role="radiogroup" aria-label="Bank"></div>
+   <div id="otherWrap" hidden><label for="bank">Other bank name</label><input id="bank" autocomplete="off"></div>
    <label for="addr">Bank address</label>
    <textarea id="addr" rows="3" placeholder="Branch address"></textarea>
    <label for="date">Letter date (auto: today)</label><input id="date" type="date">
@@ -170,8 +182,9 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const todayISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const fmt=iso=>{if(!iso)return'';const [y,m,d]=iso.split('-');return d+'.'+m+'.'+y};
 
-const KNOWN={'truhome-finance-limited':'No 5, Shrinivas Towers, 1st Floor, Cenotaph Road,\nTeynampet, Chennai - 600 018.'};
-const DEF={bank:'',addr:'',date:todayISO(),serial:'',serialAuto:true,issued:null,loan:'',ttl:'Mr.',name:'',showAll:false,docs:[{date:'',doc:'',docno:'',sp:'Mr.',seller:'',bp:'Mr.',buyer:'',orig:'Original'}]};
+const BANKS=[["Aditya Birla Capital Limited", ""], ["Axis Finance Limited", ""], ["Capital India Finance Limited", ""], ["Cholamandalam Investment and Finance Company Limited (CIFCL)", ""], ["Clix Capital Services Pvt. Ltd.", ""], ["FED BANK Financial Services Ltd.", "Nungambakkam"], ["FED BANK Financial Services Ltd.", "Porur"], ["Grihum Housing Finance Ltd.", ""], ["Godrej Finance Ltd.", ""], ["Hero Housing Finance Limited", ""], ["Hinduja Housing Finance (HFFL)", ""], ["ICICI Home Finance Company Ltd.", "Anna Nagar"], ["ICICI Home Finance Company Ltd.", "T Nagar"], ["ICICI Home Finance Company Ltd.", "Tambaram"], ["IDFC First Bank Limited", ""], ["IIFL Finance Limited", ""], ["Jana Small Finance Bank Limited", ""], ["Kisetsu Saison Finance (India) Private Limited", ""], ["Motilal Oswal Home Finance Limited", ""], ["PIRAMAL FINANCE LIMITED", ""], ["Poonawalla Fincorp Ltd.", ""], ["PNB Housing Finance Ltd.", ""], ["Protium Finance Limited", ""], ["RBL Bank Limited", ""], ["Religare Housing Development Finance Corporation Ltd.", ""], ["SMFG India Credit Company Ltd.", ""], ["TATA Capital Housing Finance Ltd.", "Tambaram"], ["TATA Capital Housing Finance Ltd.", "Kodambakkam"], ["TATA Capital Housing Finance Ltd.", "Perungudi"], ["Truhome Housing Finance Ltd.", "Teynampet"], ["Truhome Housing Finance Ltd.", "Ambattur"], ["Truhome Housing Finance Ltd.", "T Nagar"], ["Truhome Housing Finance Ltd.", "Tambaram"], ["UGRO CAPITAL LIMITED (UCL)", ""], ["Utkarsh Small Finance Bank Limited", ""], ["Veritas Finance Limited", ""], ["Yes Bank", ""]];
+const KNOWN={'truhome-housing-finance-ltd|teynampet':'No 5, Shrinivas Towers, 1st Floor, Cenotaph Road,\nTeynampet, Chennai - 600 018.','truhome-finance-limited|':'No 5, Shrinivas Towers, 1st Floor, Cenotaph Road,\nTeynampet, Chennai - 600 018.'};
+const DEF={bank:'',branch:'',pick:'',addr:'',date:todayISO(),serial:'',serialAuto:true,issued:null,loan:'',ttl:'Mr.',name:'',showAll:false,docs:[{date:'',doc:'',docno:'',sp:'Mr.',seller:'',bp:'Mr.',buyer:'',orig:'Original'}]};
 let S;
 try{S=JSON.parse(localStorage.getItem('pdd-letter')||'null')}catch(e){S=null}
 if(!S)S=structuredClone(DEF);
@@ -180,11 +193,13 @@ let USER='';try{USER=localStorage.getItem('pdd-user')||''}catch(e){}
 const userNo=()=>{const l=(USER.match(/[a-z]/gi)||[]).slice(0,3);const nums=(USER.match(/\d+/g)||[]).reduce((a,n)=>a+parseInt(n,10),0);if(!l.length&&!nums)return'';return String(l.reduce((a,c)=>a+c.toUpperCase().charCodeAt(0)-64,0)+nums)};
 const save=()=>{try{localStorage.setItem('pdd-letter',JSON.stringify(S))}catch(e){}};
 
-const initials=b=>b.replace(/^\s*m\/s\.?\s*/i,'').split(/[\s.,&\-\/()]+/).filter(w=>/^[A-Za-z0-9]/.test(w)).map(w=>w[0].toUpperCase()).join('');
+const initials=b=>{const m=String(b).match(/\(([A-Z]{2,10})\)/);return m?m[1]:initials0(b)};
+const initials0=b=>b.replace(/^\s*m\/s\.?\s*/i,'').split(/[\s.,&\-\/()]+/).filter(w=>/^[A-Za-z0-9]/.test(w)).map(w=>w[0].toUpperCase()).join('');
 const refNo=()=>{const d=S.date?new Date(S.date+'T00:00'):new Date();const p=[initials(S.bank)||'XX'];if(userNo())p.push(userNo());p.push(S.serial.trim()||'__');p.push(MON[d.getMonth()],d.getFullYear());return p.join('/')};
 const cap=n=>String(n||'').trim().replace(/(^|[\s.\-'(])([a-z])/g,(m,a,b)=>a+b.toUpperCase());
 const isMODT=t=>/\bMODT\b/i.test(t)||/memorandum of deposit of title/i.test(t);
 const bankFull=()=>'M/s '+(S.bank.trim()||'_____');
+const bankHead=()=>bankFull().replace(/\.?$/,'.,');
 const docText=r=>{
  const d=r.doc.trim();if(!d)return'';
  const nm=(p,n)=>{n=cap(n);return n?((p?p+' ':'')+n):''};
@@ -192,15 +207,35 @@ const docText=r=>{
  let t=d;
  if(by)t+=' executed by '+by;
  if(to)t+=' to in favour of '+to;
- t+='.';
+ if(!/\.$/.test(t))t+='.';
  if(no)t+=' (Doc.No.'+no+')';
  return t;
 };
 const subject=()=>'Sub : Handing Over The PDD - Original Documents: '+S.ttl+' '+(cap(S.name)||'XXXX');
 
 $('ttl').innerHTML=PFX.filter(Boolean).map(p=>`<option>${p}</option>`).join('');
+// ---- Bank tick list ----
+const addrKey=()=>bkey(S.bank)+'|'+(S.branch||'').toLowerCase();
+let SAVED={};try{SAVED=JSON.parse(localStorage.getItem('pdd-addr')||'{}')}catch(e){}
+const savedAddr=()=>SAVED[addrKey()]||KNOWN[addrKey()]||'';
+function drawBanks(){
+ $('bankList').innerHTML=BANKS.map(([n,b],i)=>`<label class="bk" data-q="${esc((n+' '+b).toLowerCase())}"><input type="radio" name="bankpick" value="${i}" ${S.pick===String(i)?'checked':''}><span class="box" aria-hidden="true"></span><span>${esc(n)}${b?`<small>${esc(b)} branch</small>`:''}</span></label>`).join('')
+  +`<label class="bk" data-q="other"><input type="radio" name="bankpick" value="other" ${S.pick==='other'?'checked':''}><span class="box" aria-hidden="true"></span><span>Other bank<small>Type the name yourself</small></span></label>`;
+ $('otherWrap').hidden=S.pick!=='other';
+ filterBanks();
+}
+function filterBanks(){const q=$('bankSearch').value.trim().toLowerCase();document.querySelectorAll('#bankList .bk').forEach(l=>{l.hidden=!!q&&!l.dataset.q.includes(q)&&l.dataset.q!=='other'})}
+$('bankSearch').addEventListener('input',filterBanks);
+$('bankList').addEventListener('change',e=>{
+ const v=e.target.value;S.pick=v;
+ if(v==='other'){S.bank='';S.branch='';$('otherWrap').hidden=false;$('bank').value='';$('bank').focus()}
+ else{const [n,b]=BANKS[+v];S.bank=n;S.branch=b;$('otherWrap').hidden=true;$('bank').value=n}
+ S.addr=savedAddr();$('addr').value=S.addr;
+ save();refreshPrev();applyAuto(true);peek();render();
+});
+$('addr').addEventListener('input',()=>{if(S.bank.trim()){SAVED[addrKey()]=$('addr').value;try{localStorage.setItem('pdd-addr',JSON.stringify(SAVED))}catch(e){}}});
 const fields=['bank','addr','date','loan','ttl','name'];
-fields.forEach(f=>{$(f).value=S[f];$(f).addEventListener('input',()=>{S[f]=$(f).value;save();render();if(f==='name'||f==='ttl')refreshPrev();if(f==='bank'){refreshPrev();const k=bkey(S.bank);if(!S.addr.trim()&&KNOWN[k]){S.addr=KNOWN[k];$('addr').value=S.addr}applyAuto(true);peek()}})});
+fields.forEach(f=>{$(f).value=S[f];$(f).addEventListener('input',()=>{S[f]=$(f).value;save();render();if(f==='name'||f==='ttl')refreshPrev();if(f==='bank'){refreshPrev();const k=bkey(S.bank);if(!S.addr.trim()&&savedAddr()){S.addr=savedAddr();$('addr').value=S.addr}applyAuto(true);peek()}})});
 $('user').value=USER;
 $('user').addEventListener('input',()=>{USER=$('user').value;try{localStorage.setItem('pdd-user',USER)}catch(e){}render()});
 const refreshPrev=()=>document.querySelectorAll('.doc').forEach(b=>{b.querySelector('.prev').textContent=docText(S.docs[+b.dataset.i])});
@@ -236,7 +271,7 @@ $('docs').addEventListener('input',e=>{
 });
 $('docs').addEventListener('click',e=>{const d=e.target.closest('[data-del]');if(!d)return;S.docs.splice(+d.dataset.del,1);save();drawDocs();render()});
 $('add').addEventListener('click',()=>{S.docs.push({date:'',doc:'',docno:'',sp:'Mr.',seller:'',bp:'Mr.',buyer:'',orig:'Original'});save();drawDocs();render();const n=S.docs.length-1;$('dn'+n)?.focus()});
-const newMatter=()=>{S=structuredClone(DEF);S.date=todayISO();fields.forEach(f=>$(f).value=S[f]);applyAuto(true);drawDocs();render();msg('Started a new matter.');$('bank').focus()};
+const newMatter=()=>{S=structuredClone(DEF);S.date=todayISO();fields.forEach(f=>$(f).value=S[f]);$('bankSearch').value='';drawBanks();applyAuto(true);drawDocs();render();msg('Started a new matter.');$('bankSearch').focus()};
 $('reset').addEventListener('click',newMatter);$('newMatter').addEventListener('click',()=>{newMatter();window.scrollTo({top:0,behavior:'smooth'})});
 
 const origCell=r=>S.showAll?`<div class="four">${OPTS.map(o=>(r.orig===o?'☑ ':'☐ ')+o).join('<br>')}</div>`:esc(r.orig);
@@ -252,7 +287,7 @@ function letterHTML(forWord){
  const addr=esc(S.addr).replace(/\n/g,'<br>');
  return `
  <div class="dl" ${forWord?'':''}><p>Date: ${esc(fmt(S.date))}</p><p style="text-align:right">Ref.No: ${esc(refNo())}</p></div>
- <div class="addr"><b>${esc(bankFull())}.,</b><br>${addr}</div>
+ <div class="addr"><b>${esc(bankHead())}</b><br>${addr}</div>
  <p>Ref No: ${esc(S.loan.trim()||'<Loan Number>')}</p>
  <p class="sub">${esc(subject())}</p>
  <table${P?' class="wide"':''}><thead><tr>${C.map(c=>`<th style="${W[c]?`width:${W[c]};`:''}${c==='Document'?'text-align:center':''}">${c}</th>`).join('')}</tr></thead><tbody>${tb}</tbody></table>
@@ -341,14 +376,14 @@ const fname=ext=>'PDD_'+(S.name.trim()||'Letter').replace(/[^\w]+/g,'_')+'_'+(S.
 
 $('pdf').addEventListener('click',async()=>{
  try{
-  if(!USER.trim()){msg('Enter your name under Prepared by first.');$('user').focus();return}if(!S.bank.trim()){msg('Enter the bank name first.');$('bank').focus();return}
+  if(!USER.trim()){msg('Enter your name under Prepared by first.');$('user').focus();return}if(!S.bank.trim()){msg('Tick the bank first.');$('bankSearch').focus();return}
   if(!(await issue()))return;msg('Preparing PDF…');
   const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:'mm',format:'a4'});
   const img=await letterhead();const bg=()=>doc.addImage(img,'JPEG',0,0,210,297);
   bg();const L=19,R=191;let y=50;
   doc.setFont('times','normal');doc.setFontSize(12);
   doc.text('Date: '+fmt(S.date),L,y);doc.text('Ref.No: '+refNo(),R,y,{align:'right'});y+=11;
-  doc.setFont('times','bold');doc.text(bankFull()+'.,',L,y);y+=5.6;doc.setFont('times','normal');
+  doc.setFont('times','bold');doc.text(bankHead(),L,y);y+=5.6;doc.setFont('times','normal');
   S.addr.split('\n').forEach(l=>{doc.splitTextToSize(l,R-L).forEach(x=>{doc.text(x,L,y);y+=5.6})});
   y+=4;doc.text('Ref No: '+(S.loan.trim()||'<Loan Number>'),L,y);y+=8;
   doc.setFont('times','bold');doc.splitTextToSize(subject(),R-L).forEach(x=>{doc.text(x,L,y);y+=5.8});doc.setFont('times','normal');y+=3;
@@ -378,7 +413,7 @@ $('pdf').addEventListener('click',async()=>{
  }catch(e){msg('Could not build the PDF: '+e.message)}
 });
 
-$('word').addEventListener('click',async()=>{if(!USER.trim()){msg('Enter your name under Prepared by first.');$('user').focus();return}if(!S.bank.trim()){msg('Enter the bank name first.');$('bank').focus();return}if(!(await issue()))return;
+$('word').addEventListener('click',async()=>{if(!USER.trim()){msg('Enter your name under Prepared by first.');$('user').focus();return}if(!S.bank.trim()){msg('Tick the bank first.');$('bankSearch').focus();return}if(!(await issue()))return;
  const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>PDD Letter</title>
 <style>@page{size:21cm 29.7cm;margin:4.5cm 2cm 3.5cm 2cm}body{font-family:'Bookman Old Style',serif;font-size:12pt;line-height:1.5}p{margin:0}table{border-collapse:collapse;width:100%}th,td{border:1px solid #000;padding:4pt 6pt;vertical-align:top;font-size:11.5pt}th{background:#f4e9e9;text-align:left}.dl{width:100%}.sub{font-weight:bold;margin:10pt 0}</style></head><body>
 <table class="dl" style="border:none;width:100%"><tr><td style="border:none;padding:0">Date: ${esc(fmt(S.date))}</td><td style="border:none;padding:0;text-align:right">Ref.No: ${esc(refNo())}</td></tr></table><br>
@@ -388,7 +423,7 @@ ${letterHTML(true).replace(/^[\s\S]*?<\/div>/,'')}</body></html>`;
 
 $('copy').addEventListener('click',async()=>{
  const rs=rows();
- const t=['Date: '+fmt(S.date)+'\t\tRef.No: '+refNo(),'',bankFull()+'.,',S.addr,'','Ref No: '+(S.loan.trim()||'<Loan Number>'),'',subject(),'',cols(rs).join('\t'),
+ const t=['Date: '+fmt(S.date)+'\t\tRef.No: '+refNo(),'',bankHead(),S.addr,'','Ref No: '+(S.loan.trim()||'<Loan Number>'),'',subject(),'',cols(rs).join('\t'),
   ...rs.map((r,i)=>[i+1,fmt(r.date),docText(r),...(hasParties(rs)?[party(r,'seller'),party(r,'buyer')]:[]),S.showAll?OPTS.map(o=>(r.orig===o?'☑ ':'☐ ')+o).join(', '):r.orig].join('\t')),
   '','Kindly acknowledge the receipt of the above said documents','','Thanking You,','','Yours,','','M. Raja','Advocate.'].join('\n');
  const h=page.innerHTML;
@@ -399,7 +434,7 @@ $('copy').addEventListener('click',async()=>{
  }catch(e){try{await navigator.clipboard.writeText(t);msg('Copied as plain text.')}catch(e2){msg('Copy was blocked by the browser.')}}
 });
 
-drawDocs();applyAuto(true);peek();
+drawBanks();drawDocs();applyAuto(true);peek();
 }
 </script>
 </body>
