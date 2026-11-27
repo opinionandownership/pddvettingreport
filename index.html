@@ -37,6 +37,7 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 .pfx{display:grid;grid-template-columns:96px minmax(0,1fr);gap:6px}
 .ref small{display:block;color:var(--mute);margin-top:2px}
 .linkbtn{border:0;background:none;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;padding:0;min-height:0}
+.ctr{margin-top:8px;font-size:13px;color:var(--mute)}.ctr[data-s=ok]{color:#1d7a3a}.ctr[data-s=bad]{color:#b3261e}
 .log{list-style:none;margin:0;padding:0;font-size:13px}
 .log li{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:2px 10px;padding:8px 0;border-top:1px solid var(--line)}
 .log li:first-child{border-top:0}
@@ -112,6 +113,7 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
    <textarea id="addr" rows="3" placeholder="Branch address"></textarea>
    <label for="date">Letter date (auto: today)</label><input id="date" type="date">
    <div class="ref">Reference no. (top right of letter): <b id="refOut">—</b><small id="refNote"></small></div>
+   <div class="ctr" id="ctr" role="status">Checking the reference counter…</div>
   </section>
 
   <section class="panel">
@@ -275,10 +277,26 @@ const COUNTER_URL='https://script.google.com/macros/s/AKfycbwX0WWdbQvBQBsycrDVFz
 function bkey(b){return String(b||'').toLowerCase().replace(/^\s*m\/s\.?\s*/,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,120)||'no-bank'}
 const PEEK={};
 const nextFor=b=>PEEK[bkey(b)]||null;
-async function api(params){
- if(!COUNTER_URL)throw new Error('The reference counter is not connected yet.');
- const r=await fetch(COUNTER_URL+'?'+new URLSearchParams(params),{redirect:'follow'});
- const j=await r.json();if(!j.ok)throw new Error(j.error||'Counter error');return j;
+// JSONP call: works from GitHub Pages without CORS issues. Times out after 25 s.
+let jsonpN=0;
+function api(params){
+ return new Promise((resolve,reject)=>{
+  if(!COUNTER_URL){reject(new Error('The reference counter is not connected yet.'));return}
+  const cb='pddcb'+Date.now().toString(36)+(jsonpN++);
+  const sc=document.createElement('script');
+  let done=false;
+  const end=()=>{done=true;clearTimeout(t);try{delete window[cb]}catch(e){window[cb]=undefined}sc.remove()};
+  const t=setTimeout(()=>{if(done)return;end();reject(new Error('The counter did not answer. Check the Apps Script deployment is shared with "Anyone".'))},25000);
+  window[cb]=j=>{if(done)return;end();if(j&&j.ok)resolve(j);else reject(new Error((j&&j.error)||'Counter error'))};
+  sc.onerror=()=>{if(done)return;end();reject(new Error('Could not reach the counter. Check the Apps Script deployment is shared with "Anyone".'))};
+  sc.src=COUNTER_URL+'?'+new URLSearchParams({...params,callback:cb,_:Date.now()});
+  document.head.appendChild(sc);
+ });
+}
+async function checkCounter(){
+ const el=$('ctr');el.textContent='Checking the reference counter…';el.dataset.s='';
+ try{const j=await api({action:'ping'});el.textContent='Reference counter connected ('+(j.sheet||'Google Sheet')+').';el.dataset.s='ok'}
+ catch(e){el.textContent='Reference counter not reachable: '+e.message;el.dataset.s='bad'}
 }
 let peekT=null;
 function peek(){
@@ -295,7 +313,7 @@ function renderLog(list){
  $('log').innerHTML=list.length?list.map(x=>`<li><b>${esc(x.ref)}</b><span>${esc(x.date||'')}</span><span>${esc(x.borrower||'')}</span><span>${esc(x.loan||'')}</span>${x.by?`<span>By ${esc(x.by)}${x.userNo?' (User No '+esc(x.userNo)+')':''}</span>`:''}</li>`).join(''):'<li><span>No letters issued yet.</span></li>';
 }
 async function loadLog(){try{const j=await api({action:'recent'});renderLog(j.rows||[])}catch(e){$('log').innerHTML='<li><span>'+esc(COUNTER_URL?'Register could not be loaded.':'Reference counter not connected yet.')+'</span></li>'}}
-loadLog();
+checkCounter();loadLog();
 // Every generation takes a fresh number from the shared counter. Returns true when a number was issued.
 async function issue(){
  const d=S.date?new Date(S.date+'T00:00'):new Date();

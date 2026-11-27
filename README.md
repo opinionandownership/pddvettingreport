@@ -14,10 +14,12 @@ reached, the site refuses to download rather than risk a duplicate.
 
 ## Connecting the counter (one-time)
 
-1. Create a new Google Sheet (e.g. "PDD Register").
-2. Extensions → Apps Script. Replace the code with `apps-script/Code.gs`, then Save.
-3. Deploy → New deployment → type **Web app**. Execute as: **Me**. Who has access: **Anyone**. Deploy and allow access.
-4. Copy the web app URL (ends in `/exec`) and paste it into `index.html` at `const COUNTER_URL='';`.
+1. Open Apps Script (from your Google Sheet via Extensions → Apps Script, or at script.google.com).
+2. Replace all the code with `apps-script/Code.gs`, then Save.
+3. Pick the function **setup** in the toolbar and click **Run**. Allow the permissions. The log shows which sheet is used
+   (if the script isn't attached to a sheet, it creates "PDD Register" in your Drive).
+4. Deploy → Manage deployments → Edit (pencil) → Version: **New version**. Execute as: **Me**. Who has access: **Anyone**. Deploy.
+5. The web app URL goes in `index.html` at `const COUNTER_URL=...`.
 
-The sheet gets two tabs: **Counters** (edit "Next number" to set where a bank starts) and **Register** (every number issued).
-Only you can edit the sheet and this repository.
+The site shows "Reference counter connected" in green when it works.
+The sheet has two tabs: **Counters** (edit "Next number" to set where a bank starts) and **Register** (every number issued).
