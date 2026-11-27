@@ -287,7 +287,7 @@ function letterHTML(forWord){
  const addr=esc(S.addr).replace(/\n/g,'<br>');
  return `
  <div class="dl" ${forWord?'':''}><p>Date: ${esc(fmt(S.date))}</p><p style="text-align:right">Ref.No: ${esc(refNo())}</p></div>
- <div class="addr"><b>${esc(bankHead())}</b><br>${addr}</div>
+ <div class="addr">The Manager,<br><b>${esc(bankHead())}</b><br>${addr}</div>
  <p>Ref No: ${esc(S.loan.trim()||'<Loan Number>')}</p>
  <p class="sub">${esc(subject())}</p>
  <table${P?' class="wide"':''}><thead><tr>${C.map(c=>`<th style="${W[c]?`width:${W[c]};`:''}${c==='Document'?'text-align:center':''}">${c}</th>`).join('')}</tr></thead><tbody>${tb}</tbody></table>
@@ -409,7 +409,7 @@ $('pdf').addEventListener('click',async()=>{
   bg();const L=19,R=191;let y=50;
   doc.setFont('times','normal');doc.setFontSize(12);
   doc.text('Date: '+fmt(S.date),L,y);doc.text('Ref.No: '+refNo(),R,y,{align:'right'});y+=11;
-  doc.setFont('times','bold');doc.text(bankHead(),L,y);y+=5.6;doc.setFont('times','normal');
+  doc.text('The Manager,',L,y);y+=5.6;doc.setFont('times','bold');doc.text(bankHead(),L,y);y+=5.6;doc.setFont('times','normal');
   S.addr.split('\n').forEach(l=>{doc.splitTextToSize(l,R-L).forEach(x=>{doc.text(x,L,y);y+=5.6})});
   y+=4;doc.text('Ref No: '+(S.loan.trim()||'<Loan Number>'),L,y);y+=8;
   doc.setFont('times','bold');doc.splitTextToSize(subject(),R-L).forEach(x=>{doc.text(x,L,y);y+=5.8});doc.setFont('times','normal');y+=3;
@@ -449,7 +449,7 @@ ${letterHTML(true).replace(/^[\s\S]*?<\/div>/,'')}</body></html>`;
 
 $('copy').addEventListener('click',async()=>{
  const rs=rows();
- const t=['Date: '+fmt(S.date)+'\t\tRef.No: '+refNo(),'',bankHead(),S.addr,'','Ref No: '+(S.loan.trim()||'<Loan Number>'),'',subject(),'',cols(rs).join('\t'),
+ const t=['Date: '+fmt(S.date)+'\t\tRef.No: '+refNo(),'','The Manager,',bankHead(),S.addr,'','Ref No: '+(S.loan.trim()||'<Loan Number>'),'',subject(),'',cols(rs).join('\t'),
   ...rs.map((r,i)=>[i+1,fmt(r.date),docText(r),...(hasParties(rs)?[party(r,'seller'),party(r,'buyer')]:[]),S.showAll?OPTS.map(o=>(r.orig===o?'☑ ':'☐ ')+o).join(', '):r.orig].join('\t')),
   '','Kindly acknowledge the receipt of the above said documents','','Thanking You,','','Yours,','','M. Raja','Advocate.'].join('\n');
  const h=page.innerHTML;
