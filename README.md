@@ -4,6 +4,12 @@ Website: https://opinionandownership.github.io/pddvettingreport/
 
 Fills in the PDD handover letter on the M. Raja / Opinion & Ownership letterhead and downloads it as PDF or Word.
 
+## Bulk letters
+
+1. Click **Download template** and fill the **Letters** sheet: one row per document; rows with the same **Matter No** become one letter.
+2. Click **Upload filled sheet**. The site lists each letter and flags anything missing (bank, address, borrower, dates).
+3. Choose **One combined PDF** or **ZIP of separate PDFs** and click **Generate**. Each letter gets its own reference number from the shared counter.
+
 ## Reference numbers
 
 Format: `BANK INITIALS / USER NO / RUNNING NO / Mon / Year`, e.g. `TFL/32/1/Nov/2026`.
