@@ -121,32 +121,12 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
    <div class="ref">User No.: <b id="userNo">—</b></div>
   </section>
 
-  <section class="panel" id="bulkPanel">
-   <h2>Bulk letters</h2>
-   <p class="hint" style="color:var(--mute);margin:0 0 10px">Fill the template with one row per document. Rows with the same matter no. become one letter, and each letter gets its own reference number.</p>
-   <div class="btns">
-    <button class="btn ghost" id="tplBtn" type="button">Download template</button>
-    <label class="btn" for="bulkFile" style="cursor:pointer">Upload filled sheet</label>
-    <input id="bulkFile" type="file" accept=".xlsx,.xls,.csv" hidden>
-   </div>
-   <div id="bulkOut" hidden>
-    <div class="bulkhead" id="bulkSum"></div>
-    <div class="scroll"><table class="bt"><thead><tr><th>Matter</th><th>Bank</th><th>Borrower</th><th>Docs</th><th></th></tr></thead><tbody id="bulkRows"></tbody></table></div>
-    <div class="opts" role="radiogroup" aria-label="Bulk download format" style="margin-top:10px">
-     <label class="opt"><input type="radio" name="bulkFmt" value="one" checked> One combined PDF</label>
-     <label class="opt"><input type="radio" name="bulkFmt" value="zip"> ZIP of separate PDFs</label>
-    </div>
-    <div class="btns" style="margin-top:10px"><button class="btn" id="bulkGo" type="button">Generate all letters</button><button class="btn ghost" id="bulkClear" type="button">Clear</button></div>
-   </div>
-   <div class="msg" id="bulkMsg"></div>
-  </section>
-
   <section class="panel">
    <h2>Bank</h2>
    <label for="bankSearch">Tick the bank</label>
    <input id="bankSearch" type="search" placeholder="Search banks or branch" autocomplete="off" aria-label="Search banks">
    <div class="bklist" id="bankList" role="radiogroup" aria-label="Bank"></div>
-   <div id="otherWrap" hidden><label for="bank">Other bank name</label><input id="bank" autocomplete="off"></div>
+   <div id="otherWrap" hidden><label for="bank">Other bank name</label><input id="bank" autocomplete="off"><label for="branchOther">Branch (optional)</label><input id="branchOther" autocomplete="off" placeholder="e.g. Anna Nagar"></div>
    <label for="addr">Bank address</label>
    <textarea id="addr" rows="3" placeholder="Branch address"></textarea>
    <label for="date">Letter date (auto: today)</label><input id="date" type="date">
@@ -182,6 +162,22 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
     <button class="btn ghost" id="reset" type="button">New matter</button>
    </div>
    <div class="msg" id="msg">Downloading the PDF or Word file issues this ref. no. and moves the serial to the next number.</div>
+  </section>
+
+  <section class="panel" id="batchPanel">
+   <h2>Batch (bulk letters)</h2>
+   <p class="hint" style="color:var(--mute);margin:0 0 10px">Fill in a letter above and add it to the batch. Repeat for each matter, then generate them all at once. Each letter gets its own reference number.</p>
+   <div class="btns"><button class="btn" id="addBatch" type="button">+ Add this letter to batch</button><button class="btn ghost" id="cancelEdit" type="button" hidden>Cancel edit</button></div>
+   <div id="batchOut" hidden>
+    <div class="bulkhead" id="batchSum"></div>
+    <div class="scroll"><table class="bt"><thead><tr><th>#</th><th>Bank</th><th>Borrower</th><th>Docs</th><th></th></tr></thead><tbody id="batchRows"></tbody></table></div>
+    <div class="opts" role="radiogroup" aria-label="Batch download format" style="margin-top:10px">
+     <label class="opt"><input type="radio" name="bulkFmt" value="one" checked> One combined PDF</label>
+     <label class="opt"><input type="radio" name="bulkFmt" value="zip"> ZIP of separate PDFs</label>
+    </div>
+    <div class="btns" style="margin-top:10px"><button class="btn" id="batchGo" type="button">Generate all</button><button class="btn ghost" id="batchClear" type="button">Clear batch</button></div>
+   </div>
+   <div class="msg" id="batchMsg"></div>
   </section>
 
   <section class="panel">
@@ -229,6 +225,7 @@ const refNo=()=>{const d=S.date?new Date(S.date+'T00:00'):new Date();const p=[in
 const cap=n=>String(n||'').trim().replace(/(^|[\s.\-'(])([a-z])/g,(m,a,b)=>a+b.toUpperCase());
 const isMODT=t=>/\bMODT\b/i.test(t)||/memorandum of deposit of title/i.test(t);
 const bankFull=()=>'M/s '+(S.bank.trim()||'_____');
+const branchLine=()=>{const b=cap(S.branch||'').trim();if(!b)return'';return(/\bbranch\b/i.test(b)?b:b+' Branch')+','};
 const bankHead=()=>bankFull().replace(/\.?$/,'.,');
 const docText=r=>{
  const d=r.doc.trim();if(!d)return'';
@@ -256,9 +253,10 @@ function drawBanks(){
 }
 function filterBanks(){const q=$('bankSearch').value.trim().toLowerCase();document.querySelectorAll('#bankList .bk').forEach(l=>{l.hidden=!!q&&!l.dataset.q.includes(q)&&l.dataset.q!=='other'})}
 $('bankSearch').addEventListener('input',filterBanks);
+$('branchOther').addEventListener('input',()=>{S.branch=$('branchOther').value;save();render()});
 $('bankList').addEventListener('change',e=>{
  const v=e.target.value;S.pick=v;
- if(v==='other'){S.bank='';S.branch='';$('otherWrap').hidden=false;$('bank').value='';$('bank').focus()}
+ if(v==='other'){S.bank='';S.branch='';$('otherWrap').hidden=false;$('bank').value='';$('branchOther').value='';$('bank').focus()}
  else{const [n,b]=BANKS[+v];S.bank=n;S.branch=b;$('otherWrap').hidden=true;$('bank').value=n}
  S.addr=savedAddr();$('addr').value=S.addr;
  save();refreshPrev();applyAuto(true);peek();render();
@@ -302,7 +300,7 @@ $('docs').addEventListener('input',e=>{
 });
 $('docs').addEventListener('click',e=>{const d=e.target.closest('[data-del]');if(!d)return;S.docs.splice(+d.dataset.del,1);save();drawDocs();render()});
 $('add').addEventListener('click',()=>{S.docs.push({date:'',doc:'',docno:'',sp:'Mr.',seller:'',bp:'Mr.',buyer:'',orig:'Original'});save();drawDocs();render();const n=S.docs.length-1;$('dn'+n)?.focus()});
-const newMatter=()=>{S=structuredClone(DEF);S.date=todayISO();fields.forEach(f=>$(f).value=S[f]);$('bankSearch').value='';drawBanks();applyAuto(true);drawDocs();render();msg('Started a new matter.');$('bankSearch').focus()};
+const newMatter=()=>{S=structuredClone(DEF);S.date=todayISO();fields.forEach(f=>$(f).value=S[f]);$('bankSearch').value='';$('branchOther').value='';drawBanks();applyAuto(true);drawDocs();render();msg('Started a new matter.');$('bankSearch').focus()};
 $('reset').addEventListener('click',newMatter);$('newMatter').addEventListener('click',()=>{newMatter();window.scrollTo({top:0,behavior:'smooth'})});
 
 const origCell=r=>S.showAll?`<div class="four">${OPTS.map(o=>(r.orig===o?'☑ ':'☐ ')+o).join('<br>')}</div>`:esc(r.orig);
@@ -318,7 +316,7 @@ function letterHTML(forWord){
  const addr=esc(S.addr).replace(/\n/g,'<br>');
  return `
  <div class="dl" ${forWord?'':''}><p>Date: ${esc(fmt(S.date))}</p><p style="text-align:right">Ref.No: ${esc(refNo())}</p></div>
- <div class="addr">The Manager,<br><b>${esc(bankHead())}</b><br>${addr}</div>
+ <div class="addr">The Manager,<br><b>${esc(bankHead())}</b><br>${branchLine()?esc(branchLine())+'<br>':''}${addr}</div>
  <p>Ref No: ${esc(S.loan.trim()||'<Loan Number>')}</p>
  <p class="sub">${esc(subject())}</p>
  <table${P?' class="wide"':''}><thead><tr>${C.map(c=>`<th style="${W[c]?`width:${W[c]};`:''}${c==='Document'?'text-align:center':''}">${c}</th>`).join('')}</tr></thead><tbody>${tb}</tbody></table>
@@ -455,7 +453,7 @@ function drawLetter(doc,img){
   bg();const L=19,R=191;let y=50;
   doc.setFont('times','normal');doc.setFontSize(12);
   doc.text('Date: '+fmt(S.date),L,y);doc.text('Ref.No: '+refNo(),R,y,{align:'right'});y+=11;
-  doc.text('The Manager,',L,y);y+=5.6;doc.setFont('times','bold');doc.text(bankHead(),L,y);y+=5.6;doc.setFont('times','normal');
+  doc.text('The Manager,',L,y);y+=5.6;doc.setFont('times','bold');doc.text(bankHead(),L,y);y+=5.6;doc.setFont('times','normal');if(branchLine()){doc.text(branchLine(),L,y);y+=5.6}
   S.addr.split('\n').forEach(l=>{doc.splitTextToSize(l,R-L).forEach(x=>{doc.text(x,L,y);y+=5.6})});
   y+=4;doc.text('Ref No: '+(S.loan.trim()||'<Loan Number>'),L,y);y+=8;
   doc.setFont('times','bold');doc.splitTextToSize(subject(),R-L).forEach(x=>{doc.text(x,L,y);y+=5.8});doc.setFont('times','normal');y+=3;
@@ -493,7 +491,7 @@ ${letterHTML(true).replace(/^[\s\S]*?<\/div>/,'')}</body></html>`;
 
 $('copy').addEventListener('click',async()=>{
  const rs=rows();
- const t=['Date: '+fmt(S.date)+'\t\tRef.No: '+refNo(),'','The Manager,',bankHead(),S.addr,'','Ref No: '+(S.loan.trim()||'<Loan Number>'),'',subject(),'',cols(rs).join('\t'),
+ const t=['Date: '+fmt(S.date)+'\t\tRef.No: '+refNo(),'','The Manager,',bankHead(),...(branchLine()?[branchLine()]:[]),S.addr,'','Ref No: '+(S.loan.trim()||'<Loan Number>'),'',subject(),'',cols(rs).join('\t'),
   ...rs.map((r,i)=>[i+1,fmt(r.date),docText(r),...(hasParties(rs)?[party(r,'seller'),party(r,'buyer')]:[]),S.showAll?OPTS.map(o=>(r.orig===o?'☑ ':'☐ ')+o).join(', '):r.orig].join('\t')),
   '','Kindly acknowledge the receipt of the above said documents','','Thanking You,','','Yours,','','M. Raja','Advocate.'].join('\n');
  const h=page.innerHTML;
@@ -505,185 +503,100 @@ $('copy').addEventListener('click',async()=>{
 });
 
 
-// ================= Bulk letters =================
-const COLS=[
- ['matter','Matter No'],['bank','Bank'],['branch','Branch'],['addr','Bank Address'],['loan','Loan No'],
- ['ttl','Borrower Title'],['name','Borrower Name'],['ldate','Letter Date'],
- ['doc','Document'],['ddate','Document Date'],['docno','Doc No'],
- ['sp','Executed By Title'],['seller','Executed By'],['bp','In Favour Of Title'],['buyer','In Favour Of'],['orig','Originality']
-];
+// ================= Batch (bulk letters) =================
 const libs={};
 function loadLib(url){return libs[url]||(libs[url]=new Promise((res,rej)=>{const sc=document.createElement('script');sc.src=url;sc.onload=res;sc.onerror=()=>{delete libs[url];rej(new Error('Could not load '+url.split('/').pop()))};document.head.appendChild(sc)}))}
-const XLSX_URL='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const ZIP_URL='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-const norm=v=>String(v??'').toLowerCase().replace(/[^a-z0-9]+/g,'');
-const bmsg=t=>{$('bulkMsg').textContent=t};
-
-$('tplBtn').addEventListener('click',async()=>{
- try{
-  await loadLib(XLSX_URL);
-  const wb=XLSX.utils.book_new();
-  const head=COLS.map(c=>c[1]);
-  const ws=XLSX.utils.aoa_to_sheet([head]);ws['!cols']=head.map(h=>({wch:Math.max(12,h.length+2)}));
-  XLSX.utils.book_append_sheet(wb,ws,'Letters');
-  const ex=[head,
-   ['1','Truhome Housing Finance Ltd.','Teynampet','','LN0012345','Mrs.','R. Priya','','Sale Deed','12.05.2020','1234/2020','Mr.','A. Kumar','Mrs.','R. Priya','Original'],
-   ['1','Truhome Housing Finance Ltd.','Teynampet','','LN0012345','Mrs.','R. Priya','','MODT','03.11.2026','5678/2026','Mrs.','R. Priya','','','Original'],
-   ['2','Cholamandalam Investment and Finance Company Limited (CIFCL)','','No 1, Example Street, Chennai - 600 001.','LN0099','Mr.','S. Kannan','','Settlement Deed','01.02.2018','222/2018','Mr.','S. Murugan','Mr.','S. Kannan','Certified Copy']];
-  const we=XLSX.utils.aoa_to_sheet(ex);we['!cols']=head.map(h=>({wch:Math.max(12,h.length+2)}));
-  XLSX.utils.book_append_sheet(wb,we,'Example');
-  const wbk=XLSX.utils.aoa_to_sheet([['Bank (copy exactly)','Branch'],...BANKS]);wbk['!cols']=[{wch:60},{wch:18}];
-  XLSX.utils.book_append_sheet(wb,wbk,'Banks');
-  const notes=XLSX.utils.aoa_to_sheet([['How to fill the Letters sheet'],
-   ['One row per document. Rows with the same Matter No become one letter.'],
-   ['Bank, Branch, Bank Address, Loan No, Borrower and Letter Date are read from the first row of each matter.'],
-   ['Bank: copy the name from the Banks sheet. Any other name is used as typed.'],
-   ['Bank Address: leave blank to use the address saved on the website for that bank and branch.'],
-   ['Letter Date: leave blank for today. Dates as DD.MM.YYYY.'],
-   ['Titles: Mr., Mrs., Ms., Miss., Dr., M/s., Thiru., Tmt., Selvi. (blank = Mr.)'],
-   ['For MODT, In Favour Of is filled with the bank automatically; Executed By blank = borrower.'],
-   ['Originality: Original, Photocopy, Certified Copy or Online Digital Copy (blank = Original).'],
-   ['The Example sheet is not read; only the Letters sheet is.']]);notes['!cols']=[{wch:110}];
-  XLSX.utils.book_append_sheet(wb,notes,'How to fill');
-  const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
-  await saveFile('PDD_Bulk_Template.xlsx',new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  bmsg('Template downloaded. Fill the Letters sheet and upload it here.');
- }catch(e){bmsg('Could not make the template: '+e.message)}
-});
-
-function toISO(v){
- if(v==null||v==='')return'';
- if(v instanceof Date&&!isNaN(v))return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0');
- if(typeof v==='number'&&window.XLSX){const d=XLSX.SSF.parse_date_code(v);if(d)return d.y+'-'+String(d.m).padStart(2,'0')+'-'+String(d.d).padStart(2,'0')}
- const t=String(v).trim();let m=t.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})$/);
- if(m){let y=+m[3];if(y<100)y+=2000;return y+'-'+String(+m[2]).padStart(2,'0')+'-'+String(+m[1]).padStart(2,'0')}
- m=t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return m[1]+'-'+String(+m[2]).padStart(2,'0')+'-'+String(+m[3]).padStart(2,'0');
- return null;
+const tmsg=t=>{$('batchMsg').textContent=t};
+let BATCH=[];try{BATCH=JSON.parse(localStorage.getItem('pdd-batch')||'[]')}catch(e){BATCH=[]}
+let EDIT=-1;
+const saveBatch=()=>{try{localStorage.setItem('pdd-batch',JSON.stringify(BATCH))}catch(e){}};
+function checkLetter(st){
+ const e=[];
+ if(!st.bank.trim())e.push('tick the bank');
+ if(!st.addr.trim())e.push('enter the bank address');
+ if(!st.loan.trim())e.push('enter the loan number');
+ if(!st.name.trim())e.push('enter the borrower name');
+ if(!st.docs.some(r=>r.doc.trim()))e.push('add at least one document');
+ return e;
 }
-function pickTitle(v,def){const t=norm(v);if(!t)return def;const f=PFX.find(p=>p&&norm(p)===t);return f??null}
-function pickOrig(v){const t=norm(v);if(!t)return'Original';if(t.startsWith('orig'))return'Original';if(/photo|xerox|copyonly/.test(t))return'Photocopy';if(/certif/.test(t))return'Certified Copy';if(/online|digital|ec/.test(t))return'Online Digital Copy';return null}
-function matchBank(name,branch){
- const n=norm(name).replace(/^ms/,''),b=norm(branch);if(!n)return null;
- let hits=BANKS.map((x,i)=>[x,i]).filter(([x])=>norm(x[0])===n);
- if(!hits.length)hits=BANKS.map((x,i)=>[x,i]).filter(([x])=>norm(x[0]).startsWith(n)||n.startsWith(norm(x[0])));
- if(!hits.length)return null;
- const exact=hits.find(([x])=>norm(x[1])===b);
- if(exact)return exact;
- if(!b&&hits.length===1)return hits[0];
- return b?null:hits[0];
+function drawBatch(){
+ $('batchOut').hidden=!BATCH.length;
+ $('batchSum').innerHTML=`<b>${BATCH.length}</b> letter${BATCH.length===1?'':'s'} in the batch`;
+ $('batchRows').innerHTML=BATCH.map((m,i)=>`<tr${i===EDIT?' style="background:var(--acc2)"':''}><td>${i+1}</td><td>${esc(m.bank)}${m.branch?`<br><small>${esc(cap(m.branch))}</small>`:''}</td><td>${esc(m.ttl+' '+cap(m.name))}</td><td>${m.docs.filter(r=>r.doc.trim()).length}</td><td style="white-space:nowrap"><button class="linkbtn" type="button" data-edit="${i}">Edit</button> · <button class="linkbtn" type="button" data-del="${i}">Remove</button></td></tr>`).join('');
+ $('batchGo').textContent=`Generate all ${BATCH.length} letter${BATCH.length===1?'':'s'}`;
+ $('addBatch').textContent=EDIT>=0?`Save changes to letter ${EDIT+1}`:'+ Add this letter to batch';
+ $('cancelEdit').hidden=EDIT<0;
 }
-
-let BULK=[];
-function parseSheet(rows){
- if(!rows.length)throw new Error('The Letters sheet is empty.');
- const head=rows[0].map(norm);
- const idx={};COLS.forEach(([k,label])=>{idx[k]=head.indexOf(norm(label))});
- if(idx.matter<0||idx.doc<0)throw new Error('Could not find the "Matter No" and "Document" columns. Please use the template.');
- const get=(r,k)=>idx[k]<0?'':r[idx[k]];
- const groups=new Map();
- rows.slice(1).forEach((r,n)=>{
-  if(!r.some(c=>String(c??'').trim()))return;
-  const mk=String(get(r,'matter')??'').trim()||'(no matter no.)';
-  if(!groups.has(mk))groups.set(mk,[]);
-  groups.get(mk).push({r,line:n+2});
- });
- const out=[];
- for(const [mk,list] of groups){
-  const f=list[0].r,errs=[];
-  const bankIn=String(get(f,'bank')??'').trim(),branchIn=String(get(f,'branch')??'').trim();
-  const st=structuredClone(DEF);st.docs=[];
-  const hit=matchBank(bankIn,branchIn);
-  if(hit){st.bank=hit[0][0];st.branch=hit[0][1];st.pick=String(hit[1])}
-  else if(bankIn){st.bank=bankIn.replace(/^\s*m\/s\.?\s*/i,'');st.branch=branchIn;st.pick='other'}
-  else errs.push('bank missing');
-  const ak=bkey(st.bank)+'|'+(st.branch||'').toLowerCase();
-  st.addr=String(get(f,'addr')??'').trim()||SAVED[ak]||KNOWN[ak]||'';
-  if(!st.addr)errs.push('no address');
-  st.loan=String(get(f,'loan')??'').trim();
-  const tt=pickTitle(get(f,'ttl'),'Mr.');if(tt===null)errs.push('borrower title?');else st.ttl=tt||'Mr.';
-  st.name=String(get(f,'name')??'').trim();if(!st.name)errs.push('borrower missing');
-  const ld=toISO(get(f,'ldate'));if(ld===null)errs.push('letter date?');st.date=ld||todayISO();
-  list.forEach(({r,line})=>{
-   const d=String(get(r,'doc')??'').trim();if(!d){errs.push('row '+line+': document missing');return}
-   const dd=toISO(get(r,'ddate'));if(dd===null)errs.push('row '+line+': date?');
-   const sp=pickTitle(get(r,'sp'),'Mr.'),bp=pickTitle(get(r,'bp'),'Mr.'),o=pickOrig(get(r,'orig'));
-   if(sp===null||bp===null)errs.push('row '+line+': title?');
-   if(o===null)errs.push('row '+line+': originality?');
-   st.docs.push({date:dd||'',doc:d,docno:String(get(r,'docno')??'').trim(),sp:sp??'Mr.',seller:String(get(r,'seller')??'').trim(),bp:bp??'Mr.',buyer:String(get(r,'buyer')??'').trim(),orig:o||'Original'});
-  });
-  if(!st.docs.length&&!errs.some(e=>e.includes('document')))errs.push('no documents');
-  out.push({mk,st,errs,ref:''});
- }
- return out;
-}
-
-function drawBulk(){
- const ok=BULK.filter(m=>!m.errs.length).length,bad=BULK.length-ok;
- $('bulkOut').hidden=!BULK.length;
- $('bulkSum').innerHTML=`<b>${BULK.length}</b> letter${BULK.length===1?'':'s'} found`+(bad?` · <span style="color:#b3261e">${bad} need fixing and will be skipped</span>`:' · all ready');
- $('bulkRows').innerHTML=BULK.map((m,i)=>`<tr><td>${esc(m.mk)}${m.ref?`<br><small>${esc(m.ref)}</small>`:''}</td><td>${esc(m.st.bank||'—')}${m.st.branch?`<br><small>${esc(m.st.branch)}</small>`:''}</td><td>${esc(m.st.name?m.st.ttl+' '+cap(m.st.name):'—')}</td><td>${m.st.docs.length}</td><td class="${m.errs.length?'err':''}">${m.errs.length?esc(m.errs.join('; ')):`<button class="linkbtn" type="button" data-prev="${i}">Preview</button>`}</td></tr>`).join('');
- $('bulkGo').disabled=!ok;$('bulkGo').textContent=ok?`Generate ${ok} letter${ok===1?'':'s'}`:'Nothing to generate';
-}
-// Show one bulk matter in the form and preview (also lets you check it before generating).
-function loadMatter(st){
+function loadIntoForm(st){
  S=structuredClone(st);S.issued=null;
- fields.forEach(f=>{$(f).value=S[f]??''});$('bankSearch').value='';
+ fields.forEach(f=>{$(f).value=S[f]??''});$('bankSearch').value='';$('branchOther').value=S.pick==='other'?(S.branch||''):'';
  drawBanks();drawDocs();applyAuto(true);peek();render();
- window.scrollTo({top:0,behavior:'smooth'});
 }
-$('bulkRows').addEventListener('click',e=>{const b=e.target.closest('[data-prev]');if(b)loadMatter(BULK[+b.dataset.prev].st)});
-
-$('bulkFile').addEventListener('change',async e=>{
- const f=e.target.files[0];e.target.value='';if(!f)return;
- try{
-  bmsg('Reading '+f.name+'…');await loadLib(XLSX_URL);
-  const wb=XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});
-  const name=wb.SheetNames.find(n=>norm(n)==='letters')||wb.SheetNames[0];
-  const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:'',raw:true});
-  BULK=parseSheet(rows);drawBulk();
-  bmsg(BULK.length?'Check the list, then generate.':'No rows found in the sheet.');
- }catch(err){BULK=[];drawBulk();bmsg('Could not read the sheet: '+err.message)}
+// After adding: keep bank, branch, address and date for the next letter; clear the rest.
+function nextLetter(){
+ const keep={bank:S.bank,branch:S.branch,pick:S.pick,addr:S.addr,date:S.date};
+ S=structuredClone(DEF);Object.assign(S,keep);
+ fields.forEach(f=>{$(f).value=S[f]??''});
+ drawBanks();drawDocs();applyAuto(true);peek();render();
+}
+$('addBatch').addEventListener('click',()=>{
+ const errs=checkLetter(S);
+ if(errs.length){tmsg('Before adding: '+errs.join(', ')+'.');return}
+ const st=structuredClone(S);st.docs=st.docs.filter(r=>r.doc.trim()||r.date||(r.docno||'').trim());st.issued=null;st.serial='';
+ if(EDIT>=0){BATCH[EDIT]=st;tmsg(`Letter ${EDIT+1} updated.`);EDIT=-1}
+ else{BATCH.push(st);tmsg(`Added as letter ${BATCH.length}. The bank and address are kept; fill in the next borrower and documents.`)}
+ saveBatch();drawBatch();nextLetter();
+ $('loan').focus();
 });
-$('bulkClear').addEventListener('click',()=>{BULK=[];drawBulk();bmsg('')});
+$('cancelEdit').addEventListener('click',()=>{EDIT=-1;drawBatch();nextLetter();tmsg('')});
+$('batchRows').addEventListener('click',e=>{
+ const ed=e.target.closest('[data-edit]'),dl=e.target.closest('[data-del]');
+ if(ed){EDIT=+ed.dataset.edit;loadIntoForm(BATCH[EDIT]);drawBatch();tmsg(`Editing letter ${EDIT+1}. Change it above, then click "Save changes".`);window.scrollTo({top:0,behavior:'smooth'})}
+ if(dl){const i=+dl.dataset.del;BATCH.splice(i,1);if(EDIT===i)EDIT=-1;else if(EDIT>i)EDIT--;saveBatch();drawBatch();tmsg('Letter removed.')}
+});
+$('batchClear').addEventListener('click',()=>{BATCH=[];EDIT=-1;saveBatch();drawBatch();tmsg('Batch cleared.')});
 
-$('bulkGo').addEventListener('click',async()=>{
- if(!USER.trim()){bmsg('Enter your name under Prepared by first.');$('user').focus();return}
- const todo=BULK.filter(m=>!m.errs.length);if(!todo.length)return;
+$('batchGo').addEventListener('click',async()=>{
+ if(!USER.trim()){tmsg('Enter your name under Prepared by first.');$('user').focus();return}
+ if(!BATCH.length)return;
+ if(EDIT>=0){tmsg('Save or cancel the letter you are editing first.');return}
+ const bad=BATCH.map((m,i)=>[i,checkLetter(m)]).filter(x=>x[1].length);
+ if(bad.length){tmsg(`Letter ${bad[0][0]+1}: ${bad[0][1].join(', ')}. Edit it first.`);return}
  const fmtSel=document.querySelector('input[name=bulkFmt]:checked').value;
- const keep=S;$('bulkGo').disabled=true;
- const made=[];let stopErr='';
+ const keep=S,todo=BATCH.slice();$('batchGo').disabled=true;
+ const made=[],refs=[];let one=null,stopErr='';
  try{
   if(fmtSel==='zip')await loadLib(ZIP_URL);
   await ensureUser();
   const img=await letterhead();const {jsPDF}=window.jspdf;
-  let one=null;
   for(let i=0;i<todo.length;i++){
-   const m=todo[i];bmsg(`Letter ${i+1} of ${todo.length}: getting reference number…`);
-   S=structuredClone(m.st);
-   const d=new Date(S.date+'T00:00');
+   S=structuredClone(todo[i]);
+   tmsg(`Letter ${i+1} of ${todo.length}: getting reference number…`);
+   const d=new Date((S.date||todayISO())+'T00:00');
    let j;
    try{j=await api({action:'issue',key:bkey(S.bank),ini:initials(S.bank)||'XX',user:userNo(),mon:MON[d.getMonth()],yr:String(d.getFullYear()),
     bank:S.bank,borrower:(S.ttl+' '+cap(S.name)).trim(),loan:S.loan,date:fmt(S.date),by:cap(USER)})}
    catch(err){stopErr=err.message;break}
-   S.serial=String(j.serial);S.issued=j.serial;m.ref=refNo();PEEK[bkey(S.bank)]=j.serial+1;
-   bmsg(`Letter ${i+1} of ${todo.length}: ${m.ref}`);
-   if(fmtSel==='one'){if(!one)one=new jsPDF({unit:'mm',format:'a4'});else one.addPage();drawLetter(one,img)}
+   S.serial=String(j.serial);S.issued=j.serial;PEEK[bkey(S.bank)]=j.serial+1;refs.push(refNo());
+   if(fmtSel==='one'){if(!one)one=new jsPDF({unit:'mm',format:'a4'});else one.addPage();drawLetter(one,img);made.push(fname('pdf'))}
    else{const doc=new jsPDF({unit:'mm',format:'a4'});drawLetter(doc,img);made.push([fname('pdf'),doc.output('blob')])}
-   if(fmtSel==='one')made.push([fname('pdf'),null]);
   }
-  S=keep;render();drawBulk();loadLog();
+  S=keep;render();loadLog();
   if(made.length){
    const stamp=fmt(todayISO()).replace(/\./g,'-');
    if(fmtSel==='one')await saveFile(`PDD_Letters_${stamp}_${made.length}.pdf`,one.output('blob'),'application/pdf');
-   else{const z=new JSZip();const seen={};made.forEach(([n,b])=>{let k=n;if(seen[k]){k=n.replace(/\.pdf$/,'_'+(++seen[n])+'.pdf')}else seen[k]=1;z.file(k,b)});
-    await saveFile(`PDD_Letters_${stamp}_${made.length}.zip`,await z.generateAsync({type:'blob'}),'application/zip')}
+   else{const z=new JSZip();made.forEach(([n,b])=>z.file(n,b));await saveFile(`PDD_Letters_${stamp}_${made.length}.zip`,await z.generateAsync({type:'blob'}),'application/zip')}
+   // Numbered letters leave the batch, so they are never numbered twice.
+   BATCH.splice(0,made.length);saveBatch();drawBatch();
   }
-  bmsg(stopErr?`Made ${made.length} of ${todo.length} letters, then stopped: ${stopErr}`:`Done: ${made.length} letter${made.length===1?'':'s'}, each with its own reference number.`);
- }catch(err){S=keep;render();drawBulk();bmsg('Bulk generation stopped: '+err.message+(made.length?` (${made.length} letters were numbered).`:''))}
- finally{$('bulkGo').disabled=false}
+  tmsg(stopErr?`Made ${made.length} of ${todo.length} letters (${refs.join(', ')||'none'}), then stopped: ${stopErr} The rest are still in the batch.`
+              :`Done: ${made.length} letter${made.length===1?'':'s'}: ${refs.join(', ')}.`);
+ }catch(err){S=keep;render();tmsg('Batch stopped: '+err.message)}
+ finally{$('batchGo').disabled=false}
 });
 
-drawBanks();drawDocs();applyAuto(true);peek();ensureUser().catch(()=>{});
+drawBanks();drawDocs();drawBatch();applyAuto(true);peek();ensureUser().catch(()=>{});
 }
 </script>
 </body>
