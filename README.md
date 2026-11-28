@@ -6,10 +6,12 @@ Fills in the PDD handover letter on the M. Raja / Opinion & Ownership letterhead
 
 ## Bulk letters
 
-1. Click **Download template** and fill the **Letters** sheet: one row per document; rows with the same **Matter No** become one letter.
-2. Click **Upload filled sheet**. The site lists each letter and flags anything missing (bank, address, loan no., borrower, dates).
+1. Click **Download template** (`PDD_Bulk_Template.xlsx`) and fill the **Letters** sheet: **one row per case**, with all of its documents on that row
+   (Document 1 in the first group of columns, then *Document No.2*, *No.3* … in the next groups; 5 groups are provided, more can be added by copying the last group).
+2. Click **Upload filled sheet**. The site lists each case and flags anything missing (bank, address, loan no., borrower, dates).
+   A bank name not on the list is matched to the closest bank, and the match is shown.
 3. Choose **One combined PDF** or **ZIP of separate PDFs** and click **Generate**. Each letter gets its own reference number from the shared counter.
-   If a Branch is given, the letter shows it under the bank name (e.g. "Teynampet Branch,").
+   If a Branch is given, the letter shows it under the bank name (e.g. "Tambaram Branch,"). MOD / MODT is put in favour of the bank automatically.
 
 ## Reference numbers
 

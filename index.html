@@ -123,7 +123,7 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 
   <section class="panel" id="bulkPanel">
    <h2>Bulk letters</h2>
-   <p class="hint" style="color:var(--mute);margin:0 0 10px">Fill the template with one row per document. Rows with the same matter no. become one letter, and each letter gets its own reference number.</p>
+   <p class="hint" style="color:var(--mute);margin:0 0 10px">Fill the template with one row per case, all of its documents on that row. Each row becomes one letter with its own reference number.</p>
    <div class="btns">
     <button class="btn ghost" id="tplBtn" type="button">Download template</button>
     <label class="btn" for="bulkFile" style="cursor:pointer">Upload filled sheet</label>
@@ -131,7 +131,7 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
    </div>
    <div id="bulkOut" hidden>
     <div class="bulkhead" id="bulkSum"></div>
-    <div class="scroll"><table class="bt"><thead><tr><th>Matter</th><th>Bank</th><th>Borrower</th><th>Docs</th><th></th></tr></thead><tbody id="bulkRows"></tbody></table></div>
+    <div class="scroll"><table class="bt"><thead><tr><th>Row</th><th>Bank</th><th>Borrower</th><th>Docs</th><th></th></tr></thead><tbody id="bulkRows"></tbody></table></div>
     <div class="opts" role="radiogroup" aria-label="Bulk download format" style="margin-top:10px">
      <label class="opt"><input type="radio" name="bulkFmt" value="one" checked> One combined PDF</label>
      <label class="opt"><input type="radio" name="bulkFmt" value="zip"> ZIP of separate PDFs</label>
@@ -227,7 +227,7 @@ const initials=b=>{const m=String(b).match(/\(([A-Z]{2,10})\)/);return m?m[1]:in
 const initials0=b=>b.replace(/^\s*m\/s\.?\s*/i,'').split(/[\s.,&\-\/()]+/).filter(w=>/^[A-Za-z0-9]/.test(w)).map(w=>w[0].toUpperCase()).join('');
 const refNo=()=>{const d=S.date?new Date(S.date+'T00:00'):new Date();const p=[initials(S.bank)||'XX'];if(userNo())p.push(userNo());p.push(S.serial.trim()||'__');p.push(MON[d.getMonth()],d.getFullYear());return p.join('/')};
 const cap=n=>String(n||'').trim().replace(/(^|[\s.\-'(])([a-z])/g,(m,a,b)=>a+b.toUpperCase());
-const isMODT=t=>/\bMODT\b/i.test(t)||/memorandum of deposit of title/i.test(t);
+const isMODT=t=>/\bMODT?\b/i.test(t)||/memorandum of deposit of title/i.test(t);
 const bankFull=()=>'M/s '+(S.bank.trim()||'_____');
 const branchLine=()=>{const b=cap(S.branch||'').trim();if(!b)return'';return(/\bbranch\b/i.test(b)?b:b+' Branch')+','};
 const bankHead=()=>bankFull().replace(/\.?$/,'.,');
@@ -521,36 +521,25 @@ const ZIP_URL='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
 const norm=v=>String(v??'').toLowerCase().replace(/[^a-z0-9]+/g,'');
 const bmsg=t=>{$('bulkMsg').textContent=t};
 
+const FIXCOLS=['Bank','Branch','Bank Address','Loan No','Borrower Title','Borrower Name','Letter Date'];
+const BLOCKCOLS=['Document','Document Date','Doc No','Executed By Title','Executed By','In Favour Of Title','In Favour Of','Originality'];
 $('tplBtn').addEventListener('click',async()=>{
+ const X='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
  try{
-  await loadLib(XLSX_URL);
-  const wb=XLSX.utils.book_new();
-  const head=COLS.map(c=>c[1]);
-  const ws=XLSX.utils.aoa_to_sheet([head]);ws['!cols']=head.map(h=>({wch:Math.max(12,h.length+2)}));
-  XLSX.utils.book_append_sheet(wb,ws,'Letters');
-  const ex=[head,
-   ['1','Truhome Housing Finance Ltd.','Teynampet','','LN0012345','Mrs.','R. Priya','','Sale Deed','12.05.2020','1234/2020','Mr.','A. Kumar','Mrs.','R. Priya','Original'],
-   ['1','Truhome Housing Finance Ltd.','Teynampet','','LN0012345','Mrs.','R. Priya','','MODT','03.11.2026','5678/2026','Mrs.','R. Priya','','','Original'],
-   ['2','Cholamandalam Investment and Finance Company Limited (CIFCL)','','No 1, Example Street, Chennai - 600 001.','LN0099','Mr.','S. Kannan','','Settlement Deed','01.02.2018','222/2018','Mr.','S. Murugan','Mr.','S. Kannan','Certified Copy']];
-  const we=XLSX.utils.aoa_to_sheet(ex);we['!cols']=head.map(h=>({wch:Math.max(12,h.length+2)}));
-  XLSX.utils.book_append_sheet(wb,we,'Example');
-  const wbk=XLSX.utils.aoa_to_sheet([['Bank (copy exactly)','Branch'],...BANKS]);wbk['!cols']=[{wch:60},{wch:18}];
-  XLSX.utils.book_append_sheet(wb,wbk,'Banks');
-  const notes=XLSX.utils.aoa_to_sheet([['How to fill the Letters sheet'],
-   ['One row per document. Rows with the same Matter No become one letter.'],
-   ['Bank, Branch, Bank Address, Loan No, Borrower and Letter Date are read from the first row of each matter.'],
-   ['Bank: copy the name from the Banks sheet. Any other name is used as typed.'],
-   ['Bank Address: leave blank to use the address saved on the website for that bank and branch.'],
-   ['Letter Date: leave blank for today. Dates as DD.MM.YYYY.'],
-   ['Titles: Mr., Mrs., Ms., Miss., Dr., M/s., Thiru., Tmt., Selvi. (blank = Mr.)'],
-   ['For MODT, In Favour Of is filled with the bank automatically; Executed By blank = borrower.'],
-   ['Originality: Original, Photocopy, Certified Copy or Online Digital Copy (blank = Original).'],
-   ['The Example sheet is not read; only the Letters sheet is.']]);notes['!cols']=[{wch:110}];
-  XLSX.utils.book_append_sheet(wb,notes,'How to fill');
-  const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
-  await saveFile('PDD_Bulk_Template.xlsx',new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  bmsg('Template downloaded. Fill the Letters sheet and upload it here.');
- }catch(e){bmsg('Could not make the template: '+e.message)}
+  const r=await fetch('PDD_Bulk_Template.xlsx',{cache:'no-cache'});
+  if(!r.ok)throw new Error('not found');
+  await saveFile('PDD_Bulk_Template.xlsx',await r.blob(),X);
+  bmsg('Template downloaded. Fill the Letters sheet (one row per case) and upload it here.');
+ }catch(e){
+  try{
+   await loadLib(XLSX_URL);
+   const head=[...FIXCOLS];for(let b=0;b<5;b++){if(b)head.push('Document No.'+(b+1));head.push(...BLOCKCOLS)}
+   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([head]),'Letters');
+   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Bank (copy exactly)','Branch'],...BANKS]),'Banks');
+   await saveFile('PDD_Bulk_Template.xlsx',new Blob([XLSX.write(wb,{bookType:'xlsx',type:'array'})],{type:X}),X);
+   bmsg('Template downloaded.');
+  }catch(e2){bmsg('Could not make the template: '+e2.message)}
+ }
 });
 
 function toISO(v){
@@ -564,57 +553,74 @@ function toISO(v){
 }
 function pickTitle(v,def){const t=norm(v);if(!t)return def;const f=PFX.find(p=>p&&norm(p)===t);return f??null}
 function pickOrig(v){const t=norm(v);if(!t)return'Original';if(t.startsWith('orig'))return'Original';if(/photo|xerox|copyonly/.test(t))return'Photocopy';if(/certif/.test(t))return'Certified Copy';if(/online|digital|ec/.test(t))return'Online Digital Copy';return null}
+const bw=t=>String(t||'').toLowerCase().replace(/^\s*m\/s\.?\s*/,'').replace(/\blimited\b/g,'ltd').replace(/\bprivate\b/g,'pvt').replace(/[^a-z0-9]+/g,' ').trim().split(' ').filter(Boolean);
+// Returns {i, name, branch, exact} for the closest bank on the list, or null.
 function matchBank(name,branch){
- const n=norm(name).replace(/^ms/,''),b=norm(branch);if(!n)return null;
- let hits=BANKS.map((x,i)=>[x,i]).filter(([x])=>norm(x[0])===n);
- if(!hits.length)hits=BANKS.map((x,i)=>[x,i]).filter(([x])=>norm(x[0]).startsWith(n)||n.startsWith(norm(x[0])));
- if(!hits.length)return null;
- const exact=hits.find(([x])=>norm(x[1])===b);
- if(exact)return exact;
- if(!b&&hits.length===1)return hits[0];
- return b?null:hits[0];
+ const w=bw(name);if(!w.length)return null;const b=norm(branch);
+ const all=BANKS.map((x,i)=>({i,name:x[0],branch:x[1],w:bw(x[0])}));
+ const same=a=>a.w.join(' ')===w.join(' ');
+ let hits=all.filter(same),exact=true;
+ if(!hits.length){exact=false;hits=all.filter(a=>w.every(x=>a.w.includes(x)));}
+ if(!hits.length){hits=all.filter(a=>a.w.every(x=>w.includes(x)));}
+ const names=[...new Set(hits.map(h=>h.name))];
+ if(names.length!==1)return null;
+ const br=hits.find(h=>norm(h.branch)===b);
+ if(br)return {...br,exact,branchOnList:true};
+ return {...hits[0],branch:branch||hits[0].branch,exact,branchOnList:!branch&&hits.length===1};
 }
 
 let BULK=[];
 function parseSheet(rows){
  if(!rows.length)throw new Error('The Letters sheet is empty.');
- const head=rows[0].map(norm);
- const idx={};COLS.forEach(([k,label])=>{idx[k]=head.indexOf(norm(label))});
- if(idx.matter<0||idx.doc<0)throw new Error('Could not find the "Matter No" and "Document" columns. Please use the template.');
- const get=(r,k)=>idx[k]<0?'':r[idx[k]];
- const groups=new Map();
+ const H=rows[0].map(norm);
+ const fx={};[['bank','Bank'],['branch','Branch'],['addr','Bank Address'],['loan','Loan No'],['ttl','Borrower Title'],['name','Borrower Name'],['ldate','Letter Date'],['matter','Matter No']].forEach(([k,l])=>{fx[k]=H.indexOf(norm(l))});
+ // Document groups: every "Document" column starts a group; the columns after it belong to it.
+ const bmap={documentdate:'ddate',docno:'docno',executedbytitle:'sp',executedby:'seller',infavouroftitle:'bp',infavourof:'buyer',originality:'orig'};
+ const groups=[];let g=null;const marker=new Set();
+ H.forEach((h,c)=>{
+  if(h==='document'){g={doc:c};groups.push(g);return}
+  if(/^documentno\d+$/.test(h)){marker.add(c);return}
+  if(g&&bmap[h]&&g[bmap[h]]===undefined)g[bmap[h]]=c;
+ });
+ if(!groups.length||fx.bank<0)throw new Error('Could not find the "Bank" and "Document" columns. Please use the template.');
+ const cell=(r,c)=>c==null||c<0?'':r[c];
+ const txt=(r,c)=>String(cell(r,c)??'').trim();
+ // Old layout (Matter No + one row per document) is still read: rows with the same Matter No are joined.
+ const cases=new Map();
  rows.slice(1).forEach((r,n)=>{
-  if(!r.some(c=>String(c??'').trim()))return;
-  const mk=String(get(r,'matter')??'').trim()||'(no matter no.)';
-  if(!groups.has(mk))groups.set(mk,[]);
-  groups.get(mk).push({r,line:n+2});
+  if(!r.some((v,c)=>!marker.has(c)&&String(v??'').trim()))return;
+  const key=fx.matter>=0&&txt(r,fx.matter)?'m:'+txt(r,fx.matter):'r:'+(n+2);
+  if(!cases.has(key))cases.set(key,{label:fx.matter>=0&&txt(r,fx.matter)?txt(r,fx.matter):String(n+2),list:[]});
+  cases.get(key).list.push({r,line:n+2});
  });
  const out=[];
- for(const [mk,list] of groups){
-  const f=list[0].r,errs=[];
-  const bankIn=String(get(f,'bank')??'').trim(),branchIn=String(get(f,'branch')??'').trim();
+ for(const {label,list} of cases.values()){
+  const f=list[0].r,errs=[];let note='';
+  const bankIn=txt(f,fx.bank),branchIn=txt(f,fx.branch);
   const st=structuredClone(DEF);st.docs=[];
   const hit=matchBank(bankIn,branchIn);
-  if(hit){st.bank=hit[0][0];st.branch=hit[0][1];st.pick=String(hit[1])}
-  else if(bankIn){st.bank=bankIn.replace(/^\s*m\/s\.?\s*/i,'');st.branch=branchIn;st.pick='other'}
+  if(hit){st.bank=hit.name;st.branch=hit.branch;st.pick=hit.branchOnList?String(hit.i):'other';if(!hit.exact)note='matched from "'+bankIn+'"'}
+  else if(bankIn){st.bank=bankIn.replace(/^\s*m\/s\.?\s*/i,'');st.branch=branchIn;st.pick='other';note='not on the bank list'}
   else errs.push('bank missing');
   const ak=bkey(st.bank)+'|'+(st.branch||'').toLowerCase();
-  st.addr=String(get(f,'addr')??'').trim()||SAVED[ak]||KNOWN[ak]||'';
+  st.addr=txt(f,fx.addr)||SAVED[ak]||KNOWN[ak]||'';
   if(!st.addr)errs.push('no address');
-  st.loan=String(get(f,'loan')??'').trim();if(!st.loan)errs.push('loan no. missing');
-  const tt=pickTitle(get(f,'ttl'),'Mr.');if(tt===null)errs.push('borrower title?');else st.ttl=tt||'Mr.';
-  st.name=String(get(f,'name')??'').trim();if(!st.name)errs.push('borrower missing');
-  const ld=toISO(get(f,'ldate'));if(ld===null)errs.push('letter date?');st.date=ld||todayISO();
-  list.forEach(({r,line})=>{
-   const d=String(get(r,'doc')??'').trim();if(!d){errs.push('row '+line+': document missing');return}
-   const dd=toISO(get(r,'ddate'));if(dd===null)errs.push('row '+line+': date?');
-   const sp=pickTitle(get(r,'sp'),'Mr.'),bp=pickTitle(get(r,'bp'),'Mr.'),o=pickOrig(get(r,'orig'));
-   if(sp===null||bp===null)errs.push('row '+line+': title?');
-   if(o===null)errs.push('row '+line+': originality?');
-   st.docs.push({date:dd||'',doc:d,docno:String(get(r,'docno')??'').trim(),sp:sp??'Mr.',seller:String(get(r,'seller')??'').trim(),bp:bp??'Mr.',buyer:String(get(r,'buyer')??'').trim(),orig:o||'Original'});
-  });
-  if(!st.docs.length&&!errs.some(e=>e.includes('document')))errs.push('no documents');
-  out.push({mk,st,errs,ref:''});
+  st.loan=txt(f,fx.loan);if(!st.loan)errs.push('loan no. missing');
+  const tt=pickTitle(cell(f,fx.ttl),'Mr.');if(tt===null)errs.push('borrower title?');else st.ttl=tt||'Mr.';
+  st.name=txt(f,fx.name);if(!st.name)errs.push('borrower missing');
+  const ld=toISO(cell(f,fx.ldate));if(ld===null)errs.push('letter date?');st.date=ld||todayISO();
+  list.forEach(({r,line})=>groups.forEach((gp,gi)=>{
+   const used=Object.values(gp).some(c=>txt(r,c));if(!used)return;
+   const at=list.length>1?'row '+line+' ':'';const lab=at+'document '+(gi+1);
+   const d=txt(r,gp.doc);if(!d){errs.push(lab+': name missing');return}
+   const dd=toISO(cell(r,gp.ddate));if(dd===null)errs.push(lab+': date?');
+   const sp=pickTitle(cell(r,gp.sp),'Mr.'),bp=pickTitle(cell(r,gp.bp),'Mr.'),o=pickOrig(cell(r,gp.orig));
+   if(sp===null||bp===null)errs.push(lab+': title?');
+   if(o===null)errs.push(lab+': originality?');
+   st.docs.push({date:dd||'',doc:d,docno:txt(r,gp.docno),sp:sp??'Mr.',seller:txt(r,gp.seller),bp:bp??'Mr.',buyer:txt(r,gp.buyer),orig:o||'Original'});
+  }));
+  if(!st.docs.length&&!errs.some(e=>/document/.test(e)))errs.push('no documents');
+  out.push({mk:label,st,errs,note,ref:''});
  }
  return out;
 }
@@ -623,7 +629,7 @@ function drawBulk(){
  const ok=BULK.filter(m=>!m.errs.length).length,bad=BULK.length-ok;
  $('bulkOut').hidden=!BULK.length;
  $('bulkSum').innerHTML=`<b>${BULK.length}</b> letter${BULK.length===1?'':'s'} found`+(bad?` · <span style="color:#b3261e">${bad} need fixing and will be skipped</span>`:' · all ready');
- $('bulkRows').innerHTML=BULK.map((m,i)=>`<tr><td>${esc(m.mk)}${m.ref?`<br><small>${esc(m.ref)}</small>`:''}</td><td>${esc(m.st.bank||'—')}${m.st.branch?`<br><small>${esc(m.st.branch)}</small>`:''}</td><td>${esc(m.st.name?m.st.ttl+' '+cap(m.st.name):'—')}</td><td>${m.st.docs.length}</td><td class="${m.errs.length?'err':''}">${m.errs.length?esc(m.errs.join('; ')):`<button class="linkbtn" type="button" data-prev="${i}">Preview</button>`}</td></tr>`).join('');
+ $('bulkRows').innerHTML=BULK.map((m,i)=>`<tr><td>${esc(m.mk)}${m.ref?`<br><small>${esc(m.ref)}</small>`:''}</td><td>${esc(m.st.bank||'—')}${m.st.branch?`<br><small>${esc(cap(m.st.branch))}</small>`:''}${m.note?`<br><small style="color:#9a5b00">${esc(m.note)}</small>`:''}</td><td>${esc(m.st.name?m.st.ttl+' '+cap(m.st.name):'—')}</td><td>${m.st.docs.length}</td><td class="${m.errs.length?'err':''}">${m.errs.length?esc(m.errs.join('; ')):`<button class="linkbtn" type="button" data-prev="${i}">Preview</button>`}</td></tr>`).join('');
  $('bulkGo').disabled=!ok;$('bulkGo').textContent=ok?`Generate ${ok} letter${ok===1?'':'s'}`:'Nothing to generate';
 }
 // Show one bulk matter in the form and preview (also lets you check it before generating).
@@ -639,7 +645,7 @@ $('bulkFile').addEventListener('change',async e=>{
  const f=e.target.files[0];e.target.value='';if(!f)return;
  try{
   bmsg('Reading '+f.name+'…');await loadLib(XLSX_URL);
-  const wb=XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});
+  const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
   const name=wb.SheetNames.find(n=>norm(n)==='letters')||wb.SheetNames[0];
   const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:'',raw:true});
   BULK=parseSheet(rows);drawBulk();
