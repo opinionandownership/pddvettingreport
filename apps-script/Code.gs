@@ -34,6 +34,22 @@ function setup() {
   return ss.getUrl();
 }
 
+// Run this once from the toolbar to start every bank's count again at 1.
+// (Old letters stay in the Register tab and can still be found.)
+function resetCounters() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try {
+    const sh = counters_();
+    const last = sh.getLastRow();
+    if (last >= 2) sh.deleteRows(2, last - 1);
+    SpreadsheetApp.flush();
+    Logger.log('All counters reset: every bank starts again at 1.');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function doGet(e) {
   const p = (e && e.parameter) || {};
   let out;
