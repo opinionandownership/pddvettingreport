@@ -243,7 +243,8 @@ const refNo=()=>{if(S.fixedRef)return S.fixedRef;const d=S.date?new Date(S.date+
 const cap=n=>String(n||'').trim().replace(/(^|[\s.\-'(])([a-z])/g,(m,a,b)=>a+b.toUpperCase());
 const isMODT=t=>/\bMODT?\b/i.test(t)||/memorandum of deposit of title/i.test(t);
 const bankFull=()=>'M/s '+(S.bank.trim()||'_____');
-const branchLine=()=>{const b=cap(S.branch||'').trim();if(!b)return'';return(/\bbranch\b/i.test(b)?b:b+' Branch')+','};
+// Line under the bank name: "Teynampet Branch, Chennai," (or just "Chennai," when there is no branch).
+const branchLine=()=>{const b=cap(S.branch||'').trim();if(!b&&!S.bank.trim())return'';let t=b?(/\bbranch\b/i.test(b)?b:b+' Branch'):'';if(!/chennai/i.test(t))t=t?t+', Chennai':'Chennai';return t+','};
 const bankHead=()=>bankFull().replace(/\.?$/,'.,');
 const docText=r=>{
  const d=r.doc.trim();if(!d)return'';
