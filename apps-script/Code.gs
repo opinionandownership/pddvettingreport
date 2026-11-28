@@ -1,5 +1,5 @@
 /**
- * PDD Handover Letter – shared reference counter (version 3).
+ * PDD Handover Letter – shared reference counter (version 4).
  *
  * Works whether this script was opened from a Google Sheet (Extensions > Apps Script)
  * or created on its own at script.google.com. If there is no sheet, it creates one
@@ -7,7 +7,7 @@
  *
  * Tabs:
  *   Counters – one row per bank: key and next number. Edit "Next number" to change where a bank starts.
- *   Register – every reference number ever issued.
+ *   Register – every reference number ever issued, with the full letter (so it can be opened again).
  *   Users    – every person's user number. No two people get the same number: if the number
  *              from the first 3 letters is taken, the first two letters stay and the third
  *              is swapped for the next letter of the name until a free number is found.
@@ -43,6 +43,8 @@ function doGet(e) {
     else if (p.action === 'issue') out = Object.assign({ ok: true }, issue_(p));
     else if (p.action === 'recent') out = { ok: true, rows: recent_() };
     else if (p.action === 'user') out = Object.assign({ ok: true }, user_(p.name));
+    else if (p.action === 'save') out = Object.assign({ ok: true }, save_(p.ref, p.data));
+    else if (p.action === 'find') out = { ok: true, rows: find_(p.q) };
     else throw new Error('Unknown action');
   } catch (err) {
     out = { ok: false, error: String((err && err.message) || err) };
@@ -50,8 +52,14 @@ function doGet(e) {
   return reply_(out, p.callback);
 }
 
+// The website posts the full letter here (too long for a web address).
 function doPost(e) {
-  return doGet(e);
+  let p = (e && e.parameter) || {};
+  try {
+    const body = e && e.postData && e.postData.contents;
+    if (body) p = Object.assign({}, p, JSON.parse(body));
+  } catch (err) { /* not JSON: use the parameters */ }
+  return doGet({ parameter: p });
 }
 
 // JSONP reply when the page asks for one (works from any website without CORS problems).
@@ -106,7 +114,52 @@ function sheet_(name, header) {
 
 function counters_() { return sheet_(COUNTERS, ['Bank key', 'Next number']); }
 function register_() {
-  return sheet_(REGISTER, ['Issued at', 'Ref No', 'Bank', 'Serial', 'User No', 'Prepared by', 'Borrower', 'Loan No', 'Letter date']);
+  const sh = sheet_(REGISTER, ['Issued at', 'Ref No', 'Bank', 'Serial', 'User No', 'Prepared by', 'Borrower', 'Loan No', 'Letter date', 'Letter data']);
+  if (!sh.getRange(1, 10).getValue()) sh.getRange(1, 10).setValue('Letter data').setFontWeight('bold');
+  return sh;
+}
+
+// Store the full letter next to its reference number.
+function save_(ref, data) {
+  ref = clean_(ref, 60);
+  if (!ref) throw new Error('Missing reference number');
+  const json = typeof data === 'string' ? data : JSON.stringify(data || {});
+  if (json.length > 45000) throw new Error('Letter too large to store');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(25000)) throw new Error('Counter is busy, please try again');
+  try {
+    const sh = register_();
+    const last = sh.getLastRow();
+    if (last >= 2) {
+      const refs = sh.getRange(2, 2, last - 1, 1).getDisplayValues();
+      for (let i = refs.length - 1; i >= 0; i--) {
+        if (refs[i][0] === ref) { sh.getRange(i + 2, 10).setValue(json); return { saved: ref }; }
+      }
+    }
+    throw new Error('Reference number not found in the register');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Search old letters by reference number, borrower, loan no. or bank (newest first).
+function find_(q) {
+  q = String(q || '').toLowerCase().trim();
+  if (q.length < 2) throw new Error('Type at least 2 characters');
+  const sh = register_();
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  const vals = sh.getRange(2, 1, last - 1, 10).getDisplayValues();
+  const out = [];
+  for (let i = vals.length - 1; i >= 0 && out.length < 25; i--) {
+    const r = vals[i];
+    const hay = [r[1], r[2], r[5], r[6], r[7]].join(' ').toLowerCase();
+    if (hay.indexOf(q) === -1) continue;
+    let data = null;
+    try { data = r[9] ? JSON.parse(r[9]) : null; } catch (e) { data = null; }
+    out.push({ ref: r[1], bank: r[2], by: r[5], borrower: r[6], loan: r[7], date: r[8], data: data });
+  }
+  return out;
 }
 
 function users_() { return sheet_(USERS, ['Name key', 'Name', 'User No', 'First seen']); }

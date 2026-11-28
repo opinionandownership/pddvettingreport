@@ -13,6 +13,15 @@ Fills in the PDD handover letter on the M. Raja / Opinion & Ownership letterhead
 3. Choose **One combined PDF** or **ZIP of separate PDFs** and click **Generate**. Each letter gets its own reference number from the shared counter.
    If a Branch is given, the letter shows it under the bank name (e.g. "Tambaram Branch,"). MOD / MODT is put in favour of the bank automatically.
 
+## Old reports
+
+Every letter that is generated is saved with its reference number (in the Google Sheet's Register tab, and in the browser).
+Use **Find old report** (ref. no., loan no., borrower or bank) and click **Open**: downloading it again keeps its original number.
+
+## Word files
+
+Word downloads are .docx files with the letterhead behind the text on every page (built in the browser with `lib/docx.iife.js`, MIT licence).
+
 ## Reference numbers
 
 Format: `BANK INITIALS / USER NO / RUNNING NO / Mon / Year`, e.g. `TFL/32/1/Nov/2026`.
