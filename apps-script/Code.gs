@@ -1,5 +1,5 @@
 /**
- * PDD Handover Letter – shared reference counter (version 2).
+ * PDD Handover Letter – shared reference counter (version 3).
  *
  * Works whether this script was opened from a Google Sheet (Extensions > Apps Script)
  * or created on its own at script.google.com. If there is no sheet, it creates one
@@ -8,6 +8,9 @@
  * Tabs:
  *   Counters – one row per bank: key and next number. Edit "Next number" to change where a bank starts.
  *   Register – every reference number ever issued.
+ *   Users    – every person's user number. No two people get the same number: if the number
+ *              from the first 3 letters is taken, the letters shift by one (skip the first,
+ *              add the next) until a free number is found.
  * A lock makes sure two people can never receive the same number.
  *
  * ONE-TIME SETUP
@@ -20,11 +23,13 @@
 
 const COUNTERS = 'Counters';
 const REGISTER = 'Register';
+const USERS = 'Users';
 
 function setup() {
   const ss = ss_();
   counters_();
   register_();
+  users_();
   Logger.log('Counter is using this sheet: ' + ss.getUrl());
   return ss.getUrl();
 }
@@ -37,6 +42,7 @@ function doGet(e) {
     else if (p.action === 'peek') out = { ok: true, next: peek_(key_(p.key)) };
     else if (p.action === 'issue') out = Object.assign({ ok: true }, issue_(p));
     else if (p.action === 'recent') out = { ok: true, rows: recent_() };
+    else if (p.action === 'user') out = Object.assign({ ok: true }, user_(p.name));
     else throw new Error('Unknown action');
   } catch (err) {
     out = { ok: false, error: String((err && err.message) || err) };
@@ -101,6 +107,50 @@ function sheet_(name, header) {
 function counters_() { return sheet_(COUNTERS, ['Bank key', 'Next number']); }
 function register_() {
   return sheet_(REGISTER, ['Issued at', 'Ref No', 'Bank', 'Serial', 'User No', 'Prepared by', 'Borrower', 'Loan No', 'Letter date']);
+}
+
+function users_() { return sheet_(USERS, ['Name key', 'Name', 'User No', 'First seen']); }
+
+// Letters A=1 … Z=26 of three consecutive letters, starting at "start", plus any numbers in the name.
+function userCandidate_(name, start) {
+  const letters = (String(name).match(/[a-z]/gi) || []);
+  const nums = (String(name).match(/\d+/g) || []).reduce((a, n) => a + parseInt(n, 10), 0);
+  const win = letters.slice(start, start + 3);
+  if (!win.length && !nums) return 0;
+  return win.reduce((a, c) => a + c.toUpperCase().charCodeAt(0) - 64, 0) + nums;
+}
+
+function nameKey_(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 120);
+}
+
+function user_(name) {
+  const key = nameKey_(name);
+  if (!key || !/[a-z]/.test(key)) throw new Error('Enter your name');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(25000)) throw new Error('Counter is busy, please try again');
+  try {
+    const sh = users_();
+    const last = sh.getLastRow();
+    const rows = last < 2 ? [] : sh.getRange(2, 1, last - 1, 3).getDisplayValues();
+    const mine = rows.find(r => String(r[0]).trim() === key);
+    if (mine) return { userNo: String(mine[2]), name: mine[1] };
+    const taken = new Set(rows.map(r => String(r[2]).trim()));
+    const letters = (String(name).match(/[a-z]/gi) || []).length;
+    let no = 0;
+    // Shift the 3-letter window along the name: skip one letter, add the next.
+    for (let start = 0; start === 0 || start + 3 <= letters; start++) {
+      const c = userCandidate_(name, start);
+      if (c && !taken.has(String(c))) { no = c; break; }
+    }
+    // Name too short to shift further: take the next free number after the first one.
+    if (!no) { no = userCandidate_(name, 0) || 1; while (taken.has(String(no))) no++; }
+    sh.appendRow([key, clean_(name, 80), no, new Date()]);
+    SpreadsheetApp.flush();
+    return { userNo: String(no), name: clean_(name, 80) };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function findRow_(sh, key) {

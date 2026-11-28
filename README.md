@@ -22,4 +22,5 @@ reached, the site refuses to download rather than risk a duplicate.
 5. The web app URL goes in `index.html` at `const COUNTER_URL=...`.
 
 The site shows "Reference counter connected" in green when it works.
-The sheet has two tabs: **Counters** (edit "Next number" to set where a bank starts) and **Register** (every number issued).
+The sheet has three tabs: **Counters** (edit "Next number" to set where a bank starts), **Register** (every number issued) and
+**Users** (each person's user number; if a number is already taken, the 3-letter window shifts along the name until a free one is found).

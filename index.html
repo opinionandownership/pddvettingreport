@@ -112,7 +112,7 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
    <h2>Prepared by</h2>
    <label for="user">Your name</label>
    <input id="user" autocomplete="name" placeholder="e.g. M. Raja">
-   <div class="ref">User No.: <b id="userNo">—</b><small>Sum of the alphabet positions of the first 3 letters of your name (A=1 … Z=26), plus any number in your name. It goes into the reference no. after the bank letters.</small></div>
+   <div class="ref">User No.: <b id="userNo">—</b></div>
   </section>
 
   <section class="panel">
@@ -190,7 +190,11 @@ try{S=JSON.parse(localStorage.getItem('pdd-letter')||'null')}catch(e){S=null}
 if(!S)S=structuredClone(DEF);
 S.date=todayISO(); // date is always generated fresh
 let USER='';try{USER=localStorage.getItem('pdd-user')||''}catch(e){}
-const userNo=()=>{const l=(USER.match(/[a-z]/gi)||[]).slice(0,3);const nums=(USER.match(/\d+/g)||[]).reduce((a,n)=>a+parseInt(n,10),0);if(!l.length&&!nums)return'';return String(l.reduce((a,c)=>a+c.toUpperCase().charCodeAt(0)-64,0)+nums)};
+const nameKey=n=>String(n||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().slice(0,120);
+let SRVNO={};try{SRVNO=JSON.parse(localStorage.getItem('pdd-userno')||'{}')}catch(e){}
+// Number given by the shared sheet (unique per person); until it answers, the first-3-letters number.
+const userNo=()=>SRVNO[nameKey(USER)]||userNoLocal();
+const userNoLocal=()=>{const l=(USER.match(/[a-z]/gi)||[]).slice(0,3);const nums=(USER.match(/\d+/g)||[]).reduce((a,n)=>a+parseInt(n,10),0);if(!l.length&&!nums)return'';return String(l.reduce((a,c)=>a+c.toUpperCase().charCodeAt(0)-64,0)+nums)};
 const save=()=>{try{localStorage.setItem('pdd-letter',JSON.stringify(S))}catch(e){}};
 
 const initials=b=>{const m=String(b).match(/\(([A-Z]{2,10})\)/);return m?m[1]:initials0(b)};
@@ -237,7 +241,8 @@ $('addr').addEventListener('input',()=>{if(S.bank.trim()){SAVED[addrKey()]=$('ad
 const fields=['bank','addr','date','loan','ttl','name'];
 fields.forEach(f=>{$(f).value=S[f];$(f).addEventListener('input',()=>{S[f]=$(f).value;save();render();if(f==='name'||f==='ttl')refreshPrev();if(f==='bank'){refreshPrev();const k=bkey(S.bank);if(!S.addr.trim()&&savedAddr()){S.addr=savedAddr();$('addr').value=S.addr}applyAuto(true);peek()}})});
 $('user').value=USER;
-$('user').addEventListener('input',()=>{USER=$('user').value;try{localStorage.setItem('pdd-user',USER)}catch(e){}render()});
+let uT=null;
+$('user').addEventListener('input',()=>{USER=$('user').value;try{localStorage.setItem('pdd-user',USER)}catch(e){}render();clearTimeout(uT);uT=setTimeout(()=>ensureUser().catch(()=>{}),700)});
 const refreshPrev=()=>document.querySelectorAll('.doc').forEach(b=>{b.querySelector('.prev').textContent=docText(S.docs[+b.dataset.i])});
 S.showAll=false;
 
@@ -375,11 +380,19 @@ function renderLog(list){
 async function loadLog(){try{const j=await api({action:'recent'});renderLog(j.rows||[])}catch(e){$('log').innerHTML='<li><span>'+esc(COUNTER_URL?'Register could not be loaded.':'Reference counter not connected yet.')+'</span></li>'}}
 checkCounter();loadLog();
 $('ctrRetry').addEventListener('click',()=>{checkCounter();loadLog()});
+// Ask the sheet for this person's own user number (no two people share one).
+let OLD_SCRIPT=false;
+async function ensureUser(){
+ const k=nameKey(USER);if(!k||!/[a-z]/.test(k)||SRVNO[k]||!COUNTER_URL)return;
+ try{const j=await api({action:'user',name:USER.trim()});SRVNO[k]=String(j.userNo);try{localStorage.setItem('pdd-userno',JSON.stringify(SRVNO))}catch(e){}render()}
+ catch(e){if(/Unknown action/i.test(e.message)){OLD_SCRIPT=true;return}throw e}
+}
 // Every generation takes a fresh number from the shared counter. Returns true when a number was issued.
 async function issue(){
  const d=S.date?new Date(S.date+'T00:00'):new Date();
  try{
   msg('Getting the next reference number…');
+  await ensureUser();
   const j=await api({action:'issue',key:bkey(S.bank),ini:initials(S.bank)||'XX',user:userNo(),mon:MON[d.getMonth()],yr:String(d.getFullYear()),
    bank:S.bank,borrower:(S.ttl+' '+cap(S.name)).trim(),loan:S.loan,date:fmt(S.date),by:cap(USER)});
   S.serial=String(j.serial);S.issued=j.serial;PEEK[bkey(S.bank)]=j.serial+1;save();render();loadLog();
@@ -460,7 +473,7 @@ $('copy').addEventListener('click',async()=>{
  }catch(e){try{await navigator.clipboard.writeText(t);msg('Copied as plain text.')}catch(e2){msg('Copy was blocked by the browser.')}}
 });
 
-drawBanks();drawDocs();applyAuto(true);peek();
+drawBanks();drawDocs();applyAuto(true);peek();ensureUser().catch(()=>{});
 }
 </script>
 </body>
