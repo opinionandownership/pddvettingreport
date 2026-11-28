@@ -57,6 +57,13 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 .pfx2{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
 .log li .open{grid-column:1/-1;justify-self:start}
 .reprint{background:#fff4d6;color:#6b4b00;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:13px}
+.combo{position:relative}
+.combo-list{position:absolute;z-index:20;left:0;right:0;top:calc(100% + 4px);margin:0;padding:4px;list-style:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 24px rgba(60,20,20,.16);max-height:320px;overflow-y:auto}
+.combo-list li{padding:9px 10px;border-radius:8px;cursor:pointer;font-size:14px;line-height:1.35;min-height:40px}
+.combo-list li small{display:block;color:var(--mute);font-size:12.5px}
+.combo-list li[aria-selected=true],.combo-list li:hover{background:var(--acc2)}
+.combo-list li.none{color:var(--mute);cursor:default;background:none}
+.combo-list mark{background:none;color:var(--acc);font-weight:600}
 .ctr{margin-top:8px;font-size:13px;color:var(--mute)}#ctr[data-s=ok]{color:#1d7a3a}#ctr[data-s=bad]{color:#b3261e}
 .log{list-style:none;margin:0;padding:0;font-size:13px}
 .log li{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:2px 10px;padding:8px 0;border-top:1px solid var(--line)}
@@ -126,10 +133,12 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 
   <section class="panel">
    <h2>Bank</h2>
-   <label for="bankSearch">Tick the bank</label>
-   <input id="bankSearch" type="search" placeholder="Search banks or branch" autocomplete="off" aria-label="Search banks">
-   <div class="bklist" id="bankList" role="radiogroup" aria-label="Bank"></div>
-   <div id="otherWrap" hidden><label for="bank">Other bank name</label><input id="bank" autocomplete="off"><label for="branchOther">Branch (optional)</label><input id="branchOther" autocomplete="off" placeholder="e.g. Anna Nagar"></div>
+   <label for="bankSearch">Type the bank name</label>
+   <div class="combo">
+    <input id="bankSearch" type="text" placeholder="Start typing the bank name" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="bankOpts">
+    <ul id="bankOpts" class="combo-list" role="listbox" hidden></ul>
+   </div>
+   <div id="otherWrap" hidden><input id="bank" type="hidden"><label for="branchOther">Branch (optional)</label><input id="branchOther" autocomplete="off" placeholder="e.g. Anna Nagar"></div>
    <label for="addr">Bank address</label>
    <textarea id="addr" rows="3" placeholder="Branch address"></textarea>
    <label for="date">Letter date (auto: today)</label><input id="date" type="date">
@@ -254,22 +263,50 @@ $('ttl').innerHTML=PFX.filter(Boolean).map(p=>`<option>${p}</option>`).join('');
 const addrKey=()=>bkey(S.bank)+'|'+(S.branch||'').toLowerCase();
 let SAVED={};try{SAVED=JSON.parse(localStorage.getItem('pdd-addr')||'{}')}catch(e){}
 const savedAddr=()=>SAVED[addrKey()]||KNOWN[addrKey()]||'';
+// ---- Bank: type a few letters, pick from the suggestions ----
+const bankLabel=()=>S.bank?(S.bank+(S.branch?' — '+cap(S.branch):'')):'';
 function drawBanks(){
- $('bankList').innerHTML=BANKS.map(([n,b],i)=>`<label class="bk" data-q="${esc((n+' '+b).toLowerCase())}"><input type="radio" name="bankpick" value="${i}" ${S.pick===String(i)?'checked':''}><span class="box" aria-hidden="true"></span><span>${esc(n)}${b?`<small>${esc(b)} branch</small>`:''}</span></label>`).join('')
-  +`<label class="bk" data-q="other"><input type="radio" name="bankpick" value="other" ${S.pick==='other'?'checked':''}><span class="box" aria-hidden="true"></span><span>Other bank<small>Type the name yourself</small></span></label>`;
+ $('bankSearch').value=bankLabel();
  $('otherWrap').hidden=S.pick!=='other';
- filterBanks();
+ closeBanks();
 }
-function filterBanks(){const q=$('bankSearch').value.trim().toLowerCase();document.querySelectorAll('#bankList .bk').forEach(l=>{l.hidden=!!q&&!l.dataset.q.includes(q)&&l.dataset.q!=='other'})}
-$('bankSearch').addEventListener('input',filterBanks);
-$('branchOther').addEventListener('input',()=>{S.branch=$('branchOther').value;save();render()});
-$('bankList').addEventListener('change',e=>{
- const v=e.target.value;S.pick=v;
- if(v==='other'){S.bank='';S.branch='';$('otherWrap').hidden=false;$('bank').value='';$('branchOther').value='';$('bank').focus()}
- else{const [n,b]=BANKS[+v];S.bank=n;S.branch=b;$('otherWrap').hidden=true;$('bank').value=n}
+let OPTS_B=[],ACT=-1;
+function closeBanks(){$('bankOpts').hidden=true;$('bankSearch').setAttribute('aria-expanded','false');ACT=-1}
+function hl(t,q){const i=t.toLowerCase().indexOf(q);return i<0?esc(t):esc(t.slice(0,i))+'<mark>'+esc(t.slice(i,i+q.length))+'</mark>'+esc(t.slice(i+q.length))}
+function showBanks(){
+ const raw=$('bankSearch').value.trim(),q=raw.toLowerCase();
+ if(!q){closeBanks();return}
+ const words=q.split(/\s+/);
+ OPTS_B=BANKS.map(([n,b],i)=>({i,n,b,t:(n+' '+b).toLowerCase()}))
+  .filter(o=>words.every(w=>o.t.includes(w)))
+  .sort((a,b)=>(a.n.toLowerCase().startsWith(q)?0:1)-(b.n.toLowerCase().startsWith(q)?0:1)||a.n.localeCompare(b.n))
+  .slice(0,12).map(o=>({v:String(o.i),html:hl(o.n,words[0])+(o.b?`<small>${esc(o.b)} branch</small>`:'')}));
+ OPTS_B.push({v:'other',name:raw,html:`Use “${esc(raw)}”<small>Not on the list: the name is used as typed</small>`});
+ ACT=OPTS_B.length>1?0:-1;
+ $('bankOpts').innerHTML=OPTS_B.map((o,k)=>`<li role="option" id="bo${k}" data-k="${k}" aria-selected="${k===ACT}">${o.html}</li>`).join('');
+ $('bankOpts').hidden=false;$('bankSearch').setAttribute('aria-expanded','true');
+}
+function moveAct(d){if(!OPTS_B.length)return;ACT=(ACT+d+OPTS_B.length)%OPTS_B.length;[...$('bankOpts').children].forEach((li,k)=>{li.setAttribute('aria-selected',k===ACT);if(k===ACT)li.scrollIntoView({block:'nearest'})})}
+function selectBank(v,name){
+ S.pick=v;
+ if(v==='other'){S.bank=String(name||'').replace(/^\s*m\/s\.?\s*/i,'').trim();S.branch='';$('branchOther').value=''}
+ else{const [n,b]=BANKS[+v];S.bank=n;S.branch=b}
+ $('bank').value=S.bank;
  S.addr=savedAddr();$('addr').value=S.addr;
- save();refreshPrev();applyAuto(true);peek();render();
+ drawBanks();save();refreshPrev();applyAuto(true);peek();render();
+ if(v==='other')$('branchOther').focus();
+}
+$('bankSearch').addEventListener('input',showBanks);
+$('bankSearch').addEventListener('focus',()=>{if($('bankSearch').value.trim()&&$('bankSearch').value!==bankLabel())showBanks()});
+$('bankSearch').addEventListener('keydown',e=>{
+ if(e.key==='ArrowDown'){e.preventDefault();if($('bankOpts').hidden)showBanks();else moveAct(1)}
+ else if(e.key==='ArrowUp'){e.preventDefault();moveAct(-1)}
+ else if(e.key==='Enter'){if(!$('bankOpts').hidden&&ACT>=0){e.preventDefault();const o=OPTS_B[ACT];selectBank(o.v,o.name)}}
+ else if(e.key==='Escape'){closeBanks();$('bankSearch').value=bankLabel()}
 });
+$('bankOpts').addEventListener('mousedown',e=>{const li=e.target.closest('li[data-k]');if(!li)return;e.preventDefault();const o=OPTS_B[+li.dataset.k];selectBank(o.v,o.name)});
+$('bankSearch').addEventListener('blur',()=>{setTimeout(()=>{if(document.activeElement===$('bankSearch'))return;closeBanks();$('bankSearch').value=bankLabel()},120)});
+$('branchOther').addEventListener('input',()=>{S.branch=$('branchOther').value;save();render()});
 $('addr').addEventListener('input',()=>{if(S.bank.trim()){SAVED[addrKey()]=$('addr').value;try{localStorage.setItem('pdd-addr',JSON.stringify(SAVED))}catch(e){}}});
 const fields=['bank','addr','date','loan','ttl','name'];
 fields.forEach(f=>{$(f).value=S[f];$(f).addEventListener('input',()=>{S[f]=$(f).value;save();render();if(f==='name'||f==='ttl')refreshPrev();if(f==='bank'){refreshPrev();const k=bkey(S.bank);if(!S.addr.trim()&&savedAddr()){S.addr=savedAddr();$('addr').value=S.addr}applyAuto(true);peek()}})});
@@ -486,7 +523,7 @@ const fname=ext=>('PDD_'+refNo().replace(/\//g,'-')+'_'+(cap(S.name)||'Letter'))
 
 $('pdf').addEventListener('click',async()=>{
  try{
-  if(!USER.trim()){msg('Enter your name under Prepared by first.');$('user').focus();return}if(!S.bank.trim()){msg('Tick the bank first.');$('bankSearch').focus();return}
+  if(!USER.trim()){msg('Enter your name under Prepared by first.');$('user').focus();return}if(!S.bank.trim()){msg('Choose the bank first.');$('bankSearch').focus();return}
   if(!(await issue()))return;msg('Preparing PDF…');
   const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:'mm',format:'a4'});
   drawLetter(doc,await letterhead());
@@ -573,7 +610,7 @@ async function buildDocx(){
 }
 $('word').addEventListener('click',async()=>{
  if(!USER.trim()){msg('Enter your name under Prepared by first.');$('user').focus();return}
- if(!S.bank.trim()){msg('Tick the bank first.');$('bankSearch').focus();return}
+ if(!S.bank.trim()){msg('Choose the bank first.');$('bankSearch').focus();return}
  if(!(await issue()))return;
  try{msg('Preparing Word file…');
   await saveFile(fname('docx'),await buildDocx(),'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
