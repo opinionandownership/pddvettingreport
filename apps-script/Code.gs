@@ -9,8 +9,8 @@
  *   Counters – one row per bank: key and next number. Edit "Next number" to change where a bank starts.
  *   Register – every reference number ever issued.
  *   Users    – every person's user number. No two people get the same number: if the number
- *              from the first 3 letters is taken, the letters shift by one (skip the first,
- *              add the next) until a free number is found.
+ *              from the first 3 letters is taken, the first two letters stay and the third
+ *              is swapped for the next letter of the name until a free number is found.
  * A lock makes sure two people can never receive the same number.
  *
  * ONE-TIME SETUP
@@ -111,11 +111,11 @@ function register_() {
 
 function users_() { return sheet_(USERS, ['Name key', 'Name', 'User No', 'First seen']); }
 
-// Letters A=1 … Z=26 of three consecutive letters, starting at "start", plus any numbers in the name.
-function userCandidate_(name, start) {
+// Letters A=1 … Z=26 of the first two letters plus the letter at position "third", plus any numbers in the name.
+function userCandidate_(name, third) {
   const letters = (String(name).match(/[a-z]/gi) || []);
   const nums = (String(name).match(/\d+/g) || []).reduce((a, n) => a + parseInt(n, 10), 0);
-  const win = letters.slice(start, start + 3);
+  const win = letters.slice(0, 2).concat(letters.slice(third, third + 1));
   if (!win.length && !nums) return 0;
   return win.reduce((a, c) => a + c.toUpperCase().charCodeAt(0) - 64, 0) + nums;
 }
@@ -138,13 +138,13 @@ function user_(name) {
     const taken = new Set(rows.map(r => String(r[2]).trim()));
     const letters = (String(name).match(/[a-z]/gi) || []).length;
     let no = 0;
-    // Shift the 3-letter window along the name: skip one letter, add the next.
-    for (let start = 0; start === 0 || start + 3 <= letters; start++) {
-      const c = userCandidate_(name, start);
+    // Keep the first two letters; swap the third for the 4th, 5th … letter until a number is free.
+    for (let third = 2; third === 2 || third < letters; third++) {
+      const c = userCandidate_(name, third);
       if (c && !taken.has(String(c))) { no = c; break; }
     }
     // Name too short to shift further: take the next free number after the first one.
-    if (!no) { no = userCandidate_(name, 0) || 1; while (taken.has(String(no))) no++; }
+    if (!no) { no = userCandidate_(name, 2) || 1; while (taken.has(String(no))) no++; }
     sh.appendRow([key, clean_(name, 80), no, new Date()]);
     SpreadsheetApp.flush();
     return { userNo: String(no), name: clean_(name, 80) };
